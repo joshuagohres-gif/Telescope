@@ -1,23 +1,34 @@
 import type { SystemStatus } from "@shared/schema";
 
-// Basic ASCOM Alpaca REST API client
+// ASCOM Alpaca REST API client
 // ASCOM Alpaca is a REST API standard for astronomical devices
 // Documentation: https://ascom-standards.org/api/
+// This implementation follows the ASCOM Alpaca API v1 specification
 
-export class AscomClient {
+interface AscomResponse<T> {
+  Value: T;
+  ErrorNumber: number;
+  ErrorMessage: string;
+  ClientTransactionID: number;
+  ServerTransactionID: number;
+}
+
+export class AscomTelescopeClient {
   private baseUrl: string;
   private deviceNumber: number;
+  private clientId: number;
 
   constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
+    this.clientId = Math.floor(Math.random() * 10000);
   }
 
-  private async request(method: string, endpoint: string, params: any = {}): Promise<any> {
+  private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
     const url = new URL(`${this.baseUrl}/api/v1/telescope/${this.deviceNumber}/${endpoint}`);
     
     // Add client ID and transaction ID (required by ASCOM)
-    params.ClientID = params.ClientID || 1;
+    params.ClientID = params.ClientID || this.clientId;
     params.ClientTransactionID = params.ClientTransactionID || Date.now();
 
     const options: RequestInit = {
@@ -28,138 +39,564 @@ export class AscomClient {
     };
 
     if (method === 'GET') {
-      Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+      Object.keys(params).forEach(key => url.searchParams.append(key, String(params[key])));
     } else {
       options.body = new URLSearchParams(params).toString();
     }
 
     try {
       const response = await fetch(url.toString(), options);
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: AscomResponse<T> = await response.json();
 
       if (data.ErrorNumber !== 0) {
-        throw new Error(data.ErrorMessage || 'ASCOM error');
+        throw new Error(data.ErrorMessage || `ASCOM error ${data.ErrorNumber}`);
       }
 
       return data.Value;
     } catch (error: any) {
-      throw new Error(`ASCOM request failed: ${error.message}`);
+      throw new Error(`ASCOM telescope request failed: ${error.message}`);
     }
   }
 
   // Connection
   async connect(): Promise<void> {
-    await this.request('PUT', 'connected', { Connected: true });
+    await this.request<void>('PUT', 'connected', { Connected: true });
   }
 
   async disconnect(): Promise<void> {
-    await this.request('PUT', 'connected', { Connected: false });
+    await this.request<void>('PUT', 'connected', { Connected: false });
   }
 
   async isConnected(): Promise<boolean> {
-    return await this.request('GET', 'connected');
+    return await this.request<boolean>('GET', 'connected');
   }
 
-  // Position
+  // Capabilities - check what the telescope supports
+  async canPark(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canpark');
+  }
+
+  async canUnpark(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canunpark');
+  }
+
+  async canFindHome(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canfindhome');
+  }
+
+  async canSetTracking(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'cansettracking');
+  }
+
+  async canSlew(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canslew');
+  }
+
+  async canSlewAsync(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canslewasync');
+  }
+
+  async canSlewAltAz(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canslewaltaz');
+  }
+
+  async canSlewAltAzAsync(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canslewaltazasync');
+  }
+
+  async canMoveAxis(axis: number): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canmoveaxis', { Axis: axis });
+  }
+
+  async canPulseGuide(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canpulseguide');
+  }
+
+  // Position - Current
   async getRightAscension(): Promise<number> {
-    return await this.request('GET', 'rightascension');
+    return await this.request<number>('GET', 'rightascension');
   }
 
   async getDeclination(): Promise<number> {
-    return await this.request('GET', 'declination');
+    return await this.request<number>('GET', 'declination');
   }
 
   async getAltitude(): Promise<number> {
-    return await this.request('GET', 'altitude');
+    return await this.request<number>('GET', 'altitude');
   }
 
   async getAzimuth(): Promise<number> {
-    return await this.request('GET', 'azimuth');
+    return await this.request<number>('GET', 'azimuth');
   }
 
-  // Slewing
+  // Position - Target (where telescope is slewing to)
+  async getTargetRightAscension(): Promise<number> {
+    return await this.request<number>('GET', 'targetrightascension');
+  }
+
+  async getTargetDeclination(): Promise<number> {
+    return await this.request<number>('GET', 'targetdeclination');
+  }
+
+  // Pier side information
+  async getSideOfPier(): Promise<number> {
+    return await this.request<number>('GET', 'sideofpier');
+  }
+
+  async setSideOfPier(pierSide: number): Promise<void> {
+    await this.request<void>('PUT', 'sideofpier', { SideOfPier: pierSide });
+  }
+
+  // Slewing - Equatorial coordinates
+  async slewToCoordinates(ra: number, dec: number): Promise<void> {
+    await this.request<void>('PUT', 'slewtocoordinates', { RightAscension: ra, Declination: dec });
+  }
+
   async slewToCoordinatesAsync(ra: number, dec: number): Promise<void> {
-    await this.request('PUT', 'slewtocoordinatesasync', { RightAscension: ra, Declination: dec });
+    await this.request<void>('PUT', 'slewtocoordinatesasync', { RightAscension: ra, Declination: dec });
+  }
+
+  // Slewing - Altitude/Azimuth coordinates
+  async slewToAltAz(alt: number, az: number): Promise<void> {
+    await this.request<void>('PUT', 'slewtoaltaz', { Altitude: alt, Azimuth: az });
+  }
+
+  async slewToAltAzAsync(alt: number, az: number): Promise<void> {
+    await this.request<void>('PUT', 'slewtoaltazasync', { Altitude: alt, Azimuth: az });
+  }
+
+  // Slew to target coordinates (must be set first)
+  async slewToTarget(): Promise<void> {
+    await this.request<void>('PUT', 'slewtotarget');
+  }
+
+  async slewToTargetAsync(): Promise<void> {
+    await this.request<void>('PUT', 'slewtotargetasync');
   }
 
   async isSlewing(): Promise<boolean> {
-    return await this.request('GET', 'slewing');
+    return await this.request<boolean>('GET', 'slewing');
   }
 
   async abortSlew(): Promise<void> {
-    await this.request('PUT', 'abortslew');
+    await this.request<void>('PUT', 'abortslew');
+  }
+
+  // Axis movement (for directional slewing)
+  async moveAxis(axis: number, rate: number): Promise<void> {
+    await this.request<void>('PUT', 'moveaxis', { Axis: axis, Rate: rate });
+  }
+
+  // Pulse guiding (for autoguiding)
+  async pulseGuide(direction: number, duration: number): Promise<void> {
+    await this.request<void>('PUT', 'pulseguide', { Direction: direction, Duration: duration });
+  }
+
+  async isPulseGuiding(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'ispulseguiding');
   }
 
   // Tracking
   async setTracking(enabled: boolean): Promise<void> {
-    await this.request('PUT', 'tracking', { Tracking: enabled });
+    await this.request<void>('PUT', 'tracking', { Tracking: enabled });
   }
 
   async isTracking(): Promise<boolean> {
-    return await this.request('GET', 'tracking');
+    return await this.request<boolean>('GET', 'tracking');
+  }
+
+  // Tracking rate (sidereal, lunar, solar, king)
+  async getTrackingRate(): Promise<number> {
+    return await this.request<number>('GET', 'trackingrate');
+  }
+
+  async setTrackingRate(rate: number): Promise<void> {
+    await this.request<void>('PUT', 'trackingrate', { TrackingRate: rate });
+  }
+
+  async getTrackingRates(): Promise<number[]> {
+    return await this.request<number[]>('GET', 'trackingrates');
   }
 
   // Parking
   async park(): Promise<void> {
-    await this.request('PUT', 'park');
+    await this.request<void>('PUT', 'park');
+  }
+
+  async unpark(): Promise<void> {
+    await this.request<void>('PUT', 'unpark');
   }
 
   async isParked(): Promise<boolean> {
-    return await this.request('GET', 'atpark');
+    return await this.request<boolean>('GET', 'atpark');
+  }
+
+  async setpark(): Promise<void> {
+    await this.request<void>('PUT', 'setpark');
   }
 
   // Home
   async findHome(): Promise<void> {
-    await this.request('PUT', 'findhome');
+    await this.request<void>('PUT', 'findhome');
   }
 
   async isAtHome(): Promise<boolean> {
-    return await this.request('GET', 'athome');
+    return await this.request<boolean>('GET', 'athome');
   }
 
-  // Get full status (convenience method)
-  async getStatus(): Promise<Partial<SystemStatus>> {
-    const [connected, ra, dec, alt, az, slewing, tracking, parked] = await Promise.all([
-      this.isConnected(),
-      this.getRightAscension(),
-      this.getDeclination(),
-      this.getAltitude(),
-      this.getAzimuth(),
-      this.isSlewing(),
-      this.isTracking(),
-      this.isParked(),
-    ]);
+  // Sync telescope position to coordinates (calibration)
+  async syncToCoordinates(ra: number, dec: number): Promise<void> {
+    await this.request<void>('PUT', 'synctocoordinates', { RightAscension: ra, Declination: dec });
+  }
 
-    return {
-      telescope: {
-        connected,
-        connectionType: "ascom",
-        tracking,
-        slewing,
-        parked,
-        position: { ra, dec, alt, az },
-      },
-      camera: {
-        connected: false,
-        exposing: false,
-        coolerOn: false,
-        exposureTime: 30,
-        gain: 50,
-        binning: 1,
-        progress: 0,
-      },
-      focuser: {
-        connected: false,
-        moving: false,
-        position: 0,
-        maxPosition: 10000,
-      },
-      calibration: {},
-      lastUpdate: new Date().toISOString(),
-    };
+  async syncToAltAz(alt: number, az: number): Promise<void> {
+    await this.request<void>('PUT', 'synctoaltaz', { Altitude: alt, Azimuth: az });
+  }
+
+  async syncToTarget(): Promise<void> {
+    await this.request<void>('PUT', 'synctotarget');
+  }
+
+  // Device information
+  async getName(): Promise<string> {
+    return await this.request<string>('GET', 'name');
+  }
+
+  async getDescription(): Promise<string> {
+    return await this.request<string>('GET', 'description');
+  }
+
+  async getDriverInfo(): Promise<string> {
+    return await this.request<string>('GET', 'driverinfo');
+  }
+
+  async getDriverVersion(): Promise<string> {
+    return await this.request<string>('GET', 'driverversion');
   }
 }
 
-// Note: ASCOM connection will only work if there's an ASCOM Alpaca server running
-// For development, we primarily use the mock simulator
-export const ascomClient = new AscomClient();
+// ASCOM Camera Client
+export class AscomCameraClient {
+  private baseUrl: string;
+  private deviceNumber: number;
+  private clientId: number;
+
+  constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
+    this.baseUrl = baseUrl;
+    this.deviceNumber = deviceNumber;
+    this.clientId = Math.floor(Math.random() * 10000);
+  }
+
+  private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
+    const url = new URL(`${this.baseUrl}/api/v1/camera/${this.deviceNumber}/${endpoint}`);
+    
+    params.ClientID = params.ClientID || this.clientId;
+    params.ClientTransactionID = params.ClientTransactionID || Date.now();
+
+    const options: RequestInit = {
+      method: method,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    };
+
+    if (method === 'GET') {
+      Object.keys(params).forEach(key => url.searchParams.append(key, String(params[key])));
+    } else {
+      options.body = new URLSearchParams(params).toString();
+    }
+
+    try {
+      const response = await fetch(url.toString(), options);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: AscomResponse<T> = await response.json();
+
+      if (data.ErrorNumber !== 0) {
+        throw new Error(data.ErrorMessage || `ASCOM error ${data.ErrorNumber}`);
+      }
+
+      return data.Value;
+    } catch (error: any) {
+      throw new Error(`ASCOM camera request failed: ${error.message}`);
+    }
+  }
+
+  // Connection
+  async connect(): Promise<void> {
+    await this.request<void>('PUT', 'connected', { Connected: true });
+  }
+
+  async disconnect(): Promise<void> {
+    await this.request<void>('PUT', 'connected', { Connected: false });
+  }
+
+  async isConnected(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'connected');
+  }
+
+  // Camera capabilities
+  async canAbortExposure(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canabortexposure');
+  }
+
+  async canStopExposure(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canstopexposure');
+  }
+
+  async canSetCCDTemperature(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'cansetccdtemperature');
+  }
+
+  // Camera state
+  async getCameraState(): Promise<number> {
+    return await this.request<number>('GET', 'camerastate');
+  }
+
+  async getCCDTemperature(): Promise<number> {
+    return await this.request<number>('GET', 'ccdtemperature');
+  }
+
+  async setCCDTemperature(temperature: number): Promise<void> {
+    await this.request<void>('PUT', 'setccdtemperature', { SetCCDTemperature: temperature });
+  }
+
+  async getCoolerOn(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'cooleron');
+  }
+
+  async setCoolerOn(enabled: boolean): Promise<void> {
+    await this.request<void>('PUT', 'cooleron', { CoolerOn: enabled });
+  }
+
+  async getCoolerPower(): Promise<number> {
+    return await this.request<number>('GET', 'coolerpower');
+  }
+
+  // Image properties
+  async getImageReady(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'imageready');
+  }
+
+  async getPercentCompleted(): Promise<number> {
+    return await this.request<number>('GET', 'percentcompleted');
+  }
+
+  // Exposure
+  async startExposure(duration: number, light: boolean): Promise<void> {
+    await this.request<void>('PUT', 'startexposure', { Duration: duration, Light: light });
+  }
+
+  async stopExposure(): Promise<void> {
+    await this.request<void>('PUT', 'stopexposure');
+  }
+
+  async abortExposure(): Promise<void> {
+    await this.request<void>('PUT', 'abortexposure');
+  }
+
+  async getLastExposureDuration(): Promise<number> {
+    return await this.request<number>('GET', 'lastexposureduration');
+  }
+
+  // Gain and offset
+  async getGain(): Promise<number> {
+    return await this.request<number>('GET', 'gain');
+  }
+
+  async setGain(gain: number): Promise<void> {
+    await this.request<void>('PUT', 'gain', { Gain: gain });
+  }
+
+  async getGainMin(): Promise<number> {
+    return await this.request<number>('GET', 'gainmin');
+  }
+
+  async getGainMax(): Promise<number> {
+    return await this.request<number>('GET', 'gainmax');
+  }
+
+  async getOffset(): Promise<number> {
+    return await this.request<number>('GET', 'offset');
+  }
+
+  async setOffset(offset: number): Promise<void> {
+    await this.request<void>('PUT', 'offset', { Offset: offset });
+  }
+
+  // Binning
+  async getBinX(): Promise<number> {
+    return await this.request<number>('GET', 'binx');
+  }
+
+  async setBinX(bin: number): Promise<void> {
+    await this.request<void>('PUT', 'binx', { BinX: bin });
+  }
+
+  async getBinY(): Promise<number> {
+    return await this.request<number>('GET', 'biny');
+  }
+
+  async setBinY(bin: number): Promise<void> {
+    await this.request<void>('PUT', 'biny', { BinY: bin });
+  }
+}
+
+// ASCOM Focuser Client
+export class AscomFocuserClient {
+  private baseUrl: string;
+  private deviceNumber: number;
+  private clientId: number;
+
+  constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
+    this.baseUrl = baseUrl;
+    this.deviceNumber = deviceNumber;
+    this.clientId = Math.floor(Math.random() * 10000);
+  }
+
+  private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
+    const url = new URL(`${this.baseUrl}/api/v1/focuser/${this.deviceNumber}/${endpoint}`);
+    
+    params.ClientID = params.ClientID || this.clientId;
+    params.ClientTransactionID = params.ClientTransactionID || Date.now();
+
+    const options: RequestInit = {
+      method: method,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    };
+
+    if (method === 'GET') {
+      Object.keys(params).forEach(key => url.searchParams.append(key, String(params[key])));
+    } else {
+      options.body = new URLSearchParams(params).toString();
+    }
+
+    try {
+      const response = await fetch(url.toString(), options);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data: AscomResponse<T> = await response.json();
+
+      if (data.ErrorNumber !== 0) {
+        throw new Error(data.ErrorMessage || `ASCOM error ${data.ErrorNumber}`);
+      }
+
+      return data.Value;
+    } catch (error: any) {
+      throw new Error(`ASCOM focuser request failed: ${error.message}`);
+    }
+  }
+
+  // Connection
+  async connect(): Promise<void> {
+    await this.request<void>('PUT', 'connected', { Connected: true });
+  }
+
+  async disconnect(): Promise<void> {
+    await this.request<void>('PUT', 'connected', { Connected: false });
+  }
+
+  async isConnected(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'connected');
+  }
+
+  // Focuser capabilities
+  async isAbsolute(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'absolute');
+  }
+
+  async canHalt(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'canhalt');
+  }
+
+  async hasTempComp(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'tempcomp');
+  }
+
+  async setTempComp(enabled: boolean): Promise<void> {
+    await this.request<void>('PUT', 'tempcomp', { TempComp: enabled });
+  }
+
+  // Position
+  async getPosition(): Promise<number> {
+    return await this.request<number>('GET', 'position');
+  }
+
+  async getMaxStep(): Promise<number> {
+    return await this.request<number>('GET', 'maxstep');
+  }
+
+  async getMaxIncrement(): Promise<number> {
+    return await this.request<number>('GET', 'maxincrement');
+  }
+
+  // Movement
+  async move(position: number): Promise<void> {
+    await this.request<void>('PUT', 'move', { Position: position });
+  }
+
+  async halt(): Promise<void> {
+    await this.request<void>('PUT', 'halt');
+  }
+
+  async isMoving(): Promise<boolean> {
+    return await this.request<boolean>('GET', 'ismoving');
+  }
+
+  // Temperature
+  async getTemperature(): Promise<number> {
+    return await this.request<number>('GET', 'temperature');
+  }
+}
+
+// Device Discovery
+export class AscomDiscovery {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = "http://localhost:11111") {
+    this.baseUrl = baseUrl;
+  }
+
+  async discoverDevices(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/management/v1/configureddevices`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error: any) {
+      throw new Error(`Device discovery failed: ${error.message}`);
+    }
+  }
+
+  async getServerInfo(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/management/apiversions`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (error: any) {
+      throw new Error(`Failed to get server info: ${error.message}`);
+    }
+  }
+}
+
+// Singleton instances
+export const ascomTelescope = new AscomTelescopeClient();
+export const ascomCamera = new AscomCameraClient();
+export const ascomFocuser = new AscomFocuserClient();
+export const ascomDiscovery = new AscomDiscovery();
+
+// Legacy export for backward compatibility
+export const ascomClient = ascomTelescope;
