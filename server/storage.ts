@@ -3,8 +3,14 @@ import {
   type InsertCommand,
   type CelestialTarget,
   type InsertCelestialTarget,
+  type ImagingSequence,
+  type InsertImagingSequence,
+  type ImagingSequenceFrame,
+  type InsertImagingSequenceFrame,
   commands,
-  celestialTargets
+  celestialTargets,
+  imagingSequences,
+  imagingSequenceFrames
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { drizzle } from "drizzle-orm/neon-serverless";
@@ -27,6 +33,18 @@ export interface IStorage {
   getCelestialTargets(): Promise<CelestialTarget[]>;
   getCelestialTargetByName(name: string): Promise<CelestialTarget | undefined>;
   createCelestialTarget(target: InsertCelestialTarget): Promise<CelestialTarget>;
+
+  // Imaging Sequences
+  createImagingSequence(sequence: InsertImagingSequence): Promise<ImagingSequence>;
+  getImagingSequences(): Promise<ImagingSequence[]>;
+  getImagingSequence(id: string): Promise<ImagingSequence | undefined>;
+  updateImagingSequenceStatus(id: string, status: string, completedFrames?: number): Promise<void>;
+  deleteImagingSequence(id: string): Promise<void>;
+
+  // Imaging Sequence Frames
+  createImagingSequenceFrame(frame: InsertImagingSequenceFrame): Promise<ImagingSequenceFrame>;
+  getImagingSequenceFrames(sequenceId: string): Promise<ImagingSequenceFrame[]>;
+  updateFrameProgress(frameId: string, completed: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -130,6 +148,39 @@ export class MemStorage implements IStorage {
     const target: CelestialTarget = { ...insertTarget, id };
     this.celestialTargets.set(id, target);
     return target;
+  }
+
+  // Imaging Sequence methods (stub - not implemented in MemStorage)
+  async createImagingSequence(_sequence: InsertImagingSequence): Promise<ImagingSequence> {
+    throw new Error("Imaging sequences not supported in MemStorage");
+  }
+
+  async getImagingSequences(): Promise<ImagingSequence[]> {
+    return [];
+  }
+
+  async getImagingSequence(_id: string): Promise<ImagingSequence | undefined> {
+    return undefined;
+  }
+
+  async updateImagingSequenceStatus(_id: string, _status: string, _completedFrames?: number): Promise<void> {
+    // No-op
+  }
+
+  async deleteImagingSequence(_id: string): Promise<void> {
+    // No-op
+  }
+
+  async createImagingSequenceFrame(_frame: InsertImagingSequenceFrame): Promise<ImagingSequenceFrame> {
+    throw new Error("Imaging sequence frames not supported in MemStorage");
+  }
+
+  async getImagingSequenceFrames(_sequenceId: string): Promise<ImagingSequenceFrame[]> {
+    return [];
+  }
+
+  async updateFrameProgress(_frameId: string, _completed: number): Promise<void> {
+    // No-op
   }
 }
 
@@ -262,6 +313,76 @@ export class DbStorage implements IStorage {
       .values(insertTarget)
       .returning();
     return target;
+  }
+
+  // Imaging Sequence methods
+  async createImagingSequence(sequence: InsertImagingSequence): Promise<ImagingSequence> {
+    const [result] = await this.db
+      .insert(imagingSequences)
+      .values(sequence)
+      .returning();
+    return result;
+  }
+
+  async getImagingSequences(): Promise<ImagingSequence[]> {
+    return await this.db
+      .select()
+      .from(imagingSequences)
+      .orderBy(desc(imagingSequences.created));
+  }
+
+  async getImagingSequence(id: string): Promise<ImagingSequence | undefined> {
+    const [result] = await this.db
+      .select()
+      .from(imagingSequences)
+      .where(eq(imagingSequences.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async updateImagingSequenceStatus(id: string, status: string, completedFrames?: number): Promise<void> {
+    const updates: any = { status };
+    if (status === "running" && !await this.getImagingSequence(id).then(s => s?.started)) {
+      updates.started = new Date();
+    }
+    if (status === "completed" || status === "failed") {
+      updates.completed = new Date();
+    }
+    if (completedFrames !== undefined) {
+      updates.completedFrames = completedFrames;
+    }
+    await this.db
+      .update(imagingSequences)
+      .set(updates)
+      .where(eq(imagingSequences.id, id));
+  }
+
+  async deleteImagingSequence(id: string): Promise<void> {
+    await this.db.delete(imagingSequences).where(eq(imagingSequences.id, id));
+  }
+
+  // Imaging Sequence Frame methods
+  async createImagingSequenceFrame(frame: InsertImagingSequenceFrame): Promise<ImagingSequenceFrame> {
+    const [result] = await this.db
+      .insert(imagingSequenceFrames)
+      .values(frame)
+      .returning();
+    return result;
+  }
+
+  async getImagingSequenceFrames(sequenceId: string): Promise<ImagingSequenceFrame[]> {
+    return await this.db
+      .select()
+      .from(imagingSequenceFrames)
+      .where(eq(imagingSequenceFrames.sequenceId, sequenceId))
+      .orderBy(imagingSequenceFrames.orderIndex, imagingSequenceFrames.id);
+  }
+
+  async updateFrameProgress(frameId: string, completed: number): Promise<void> {
+    await this.db
+      .update(imagingSequenceFrames)
+      .set({ completed })
+      .where(eq(imagingSequenceFrames.id, frameId));
   }
 }
 

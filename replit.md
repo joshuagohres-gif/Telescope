@@ -129,6 +129,8 @@ server/
 - **Tables**:
   - `commands` - Command history with favorites
   - `celestial_targets` - Astronomical object database (14 pre-seeded targets)
+  - `imaging_sequences` - Automated imaging sequence definitions
+  - `imaging_sequence_frames` - Frame specifications (exposure, filter, count, dither settings)
 - **Auto-seeding**: Celestial targets initialized on first run
 - **WebSocket Support**: Configured via neonConfig for serverless compatibility
 
@@ -169,6 +171,19 @@ server/
 ### Targets
 - `GET /api/targets` - Get celestial object database
 
+### Imaging Sequences
+- `POST /api/sequences` - Create new imaging sequence
+- `GET /api/sequences` - Get all imaging sequences
+- `GET /api/sequences/:id` - Get specific sequence
+- `DELETE /api/sequences/:id` - Delete sequence
+- `POST /api/sequences/:id/frames` - Add frame to sequence
+- `GET /api/sequences/:id/frames` - Get sequence frames
+- `POST /api/sequences/:id/start` - Start sequence execution
+- `POST /api/sequences/pause` - Pause active sequence
+- `POST /api/sequences/resume` - Resume paused sequence
+- `POST /api/sequences/stop` - Stop active sequence
+- `GET /api/sequences/active` - Get active sequence and progress
+
 ## Development Status
 
 ### Completed MVP (Phases 1-3)
@@ -187,8 +202,16 @@ server/
 ✅ End-to-end testing validated  
 ✅ Dark mode optimized for night vision  
 
-### In Progress (Phase 4: Advanced Features)
-⏳ Automated imaging sequences with scripting engine  
+### Completed (Phase 4: Advanced Features)
+✅ Automated imaging sequences - Backend infrastructure complete
+  - Database schema for sequences and frames
+  - Sequence execution engine with pause/resume
+  - API endpoints for sequence management
+  - Frame-level control (exposure, filter, binning, dithering)
+  - Progress tracking and status updates
+
+### In Progress (Phase 4 Continued)
+⏳ Imaging sequence frontend UI (planner, templates, monitoring)
 ⏳ Advanced plate solving for positioning verification  
 ⏳ Observing session planner with weather integration  
 ⏳ Multi-mount support for telescope arrays  

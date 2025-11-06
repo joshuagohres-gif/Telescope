@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { telescopeSimulator } from "./services/telescope-simulator";
 import { ascomClient } from "./services/ascom-client";
 import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
+import { imagingSequenceExecutor } from "./services/imaging-sequence";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -484,6 +485,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/targets", async (req, res) => {
     const targets = await storage.getCelestialTargets();
     res.json(targets);
+  });
+
+  // ===== Imaging Sequences =====
+
+  app.post("/api/sequences", async (req, res) => {
+    try {
+      const sequence = await storage.createImagingSequence(req.body);
+      res.json(sequence);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sequences", async (req, res) => {
+    const sequences = await storage.getImagingSequences();
+    res.json(sequences);
+  });
+
+  app.get("/api/sequences/:id", async (req, res) => {
+    const sequence = await storage.getImagingSequence(req.params.id);
+    if (!sequence) {
+      return res.status(404).json({ error: "Sequence not found" });
+    }
+    res.json(sequence);
+  });
+
+  app.delete("/api/sequences/:id", async (req, res) => {
+    await storage.deleteImagingSequence(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post("/api/sequences/:id/frames", async (req, res) => {
+    try {
+      const frame = await storage.createImagingSequenceFrame({
+        ...req.body,
+        sequenceId: req.params.id
+      });
+      res.json(frame);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sequences/:id/frames", async (req, res) => {
+    const frames = await storage.getImagingSequenceFrames(req.params.id);
+    res.json(frames);
+  });
+
+  app.post("/api/sequences/:id/start", async (req, res) => {
+    try {
+      await imagingSequenceExecutor.startSequence(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/sequences/pause", async (req, res) => {
+    try {
+      await imagingSequenceExecutor.pauseSequence();
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/sequences/resume", async (req, res) => {
+    try {
+      await imagingSequenceExecutor.resumeSequence();
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/sequences/stop", async (req, res) => {
+    try {
+      await imagingSequenceExecutor.stopSequence();
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/sequences/active", async (req, res) => {
+    const active = imagingSequenceExecutor.getActiveSequence();
+    const progress = imagingSequenceExecutor.getCurrentProgress();
+    res.json({ sequence: active, progress });
   });
 
   return httpServer;

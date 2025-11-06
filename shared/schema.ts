@@ -41,6 +41,54 @@ export const insertCelestialTargetSchema = createInsertSchema(celestialTargets).
 export type InsertCelestialTarget = z.infer<typeof insertCelestialTargetSchema>;
 export type CelestialTarget = typeof celestialTargets.$inferSelect;
 
+// Imaging Sequences
+export const imagingSequences = pgTable("imaging_sequences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  targetId: varchar("target_id").references(() => celestialTargets.id),
+  targetName: text("target_name"), // For manual targets not in database
+  ra: real("ra"), // Override target RA if specified
+  dec: real("dec"), // Override target Dec if specified
+  status: text("status").notNull().default("pending"), // pending, running, paused, completed, failed
+  created: timestamp("created").notNull().defaultNow(),
+  started: timestamp("started"),
+  completed: timestamp("completed"),
+  totalFrames: integer("total_frames").notNull(),
+  completedFrames: integer("completed_frames").notNull().default(0),
+  estimatedDuration: integer("estimated_duration"), // in seconds
+  notes: text("notes"),
+});
+
+export const imagingSequenceFrames = pgTable("imaging_sequence_frames", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequenceId: varchar("sequence_id").notNull().references(() => imagingSequences.id, { onDelete: "cascade" }),
+  frameType: text("frame_type").notNull(), // light, dark, flat, bias
+  filter: text("filter"), // L, R, G, B, Ha, OIII, SII, etc.
+  exposureTime: real("exposure_time").notNull(), // in seconds
+  gain: integer("gain").notNull(),
+  binning: integer("binning").notNull().default(1),
+  count: integer("count").notNull(), // number of frames to capture
+  completed: integer("completed").notNull().default(0),
+  temperature: real("temperature"), // target sensor temperature
+  dither: boolean("dither").notNull().default(false),
+  ditherPixels: integer("dither_pixels").default(3),
+  orderIndex: integer("order_index").notNull(), // execution order
+});
+
+export const insertImagingSequenceSchema = createInsertSchema(imagingSequences).omit({
+  id: true,
+  created: true,
+});
+
+export const insertImagingSequenceFrameSchema = createInsertSchema(imagingSequenceFrames).omit({
+  id: true,
+});
+
+export type InsertImagingSequence = z.infer<typeof insertImagingSequenceSchema>;
+export type ImagingSequence = typeof imagingSequences.$inferSelect;
+export type InsertImagingSequenceFrame = z.infer<typeof insertImagingSequenceFrameSchema>;
+export type ImagingSequenceFrame = typeof imagingSequenceFrames.$inferSelect;
+
 // TypeScript interfaces for runtime state (not stored in DB)
 
 export interface TelescopePosition {
