@@ -81,6 +81,14 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        telescope: {
+          connected: "rgb(34 197 94)", // Green
+          tracking: "rgb(34 197 94)", // Green
+          slewing: "rgb(245 158 11)", // Yellow/Amber
+          error: "rgb(239 68 68)", // Red
+          idle: "rgb(156 163 175)", // Gray
+          parked: "rgb(59 130 246)", // Blue
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

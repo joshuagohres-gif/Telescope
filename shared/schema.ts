@@ -1,18 +1,168 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, real, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
+// Telescope Commands
+export const commands = pgTable("commands", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  naturalLanguage: text("natural_language").notNull(),
+  structuredCommand: text("structured_command").notNull(), // JSON stringified command
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  status: text("status").notNull().default("pending"), // pending, executing, completed, failed
+  result: text("result"), // JSON stringified result or error
+  isFavorite: boolean("is_favorite").notNull().default(false),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const insertCommandSchema = createInsertSchema(commands).omit({
+  id: true,
+  timestamp: true,
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type InsertCommand = z.infer<typeof insertCommandSchema>;
+export type Command = typeof commands.$inferSelect;
+
+// Celestial Targets Database
+export const celestialTargets = pgTable("celestial_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  type: text("type").notNull(), // planet, star, galaxy, nebula, cluster
+  ra: real("ra").notNull(), // Right Ascension in hours (0-24)
+  dec: real("dec").notNull(), // Declination in degrees (-90 to +90)
+  magnitude: real("magnitude"), // Visual magnitude
+  constellation: text("constellation"),
+  description: text("description"),
+});
+
+export const insertCelestialTargetSchema = createInsertSchema(celestialTargets).omit({
+  id: true,
+});
+
+export type InsertCelestialTarget = z.infer<typeof insertCelestialTargetSchema>;
+export type CelestialTarget = typeof celestialTargets.$inferSelect;
+
+// TypeScript interfaces for runtime state (not stored in DB)
+
+export interface TelescopePosition {
+  ra: number; // Right Ascension in hours
+  dec: number; // Declination in degrees
+  alt: number; // Altitude in degrees
+  az: number; // Azimuth in degrees
+}
+
+export interface TelescopeState {
+  connected: boolean;
+  connectionType: "mock" | "ascom";
+  tracking: boolean;
+  slewing: boolean;
+  parked: boolean;
+  position: TelescopePosition;
+  targetPosition?: TelescopePosition;
+  currentTarget?: string; // Target name
+  slewRate?: number; // 1-4, where 4 is fastest
+  pierSide?: "east" | "west" | "unknown";
+}
+
+export interface CameraState {
+  connected: boolean;
+  exposing: boolean;
+  temperature?: number; // in Celsius
+  coolerOn: boolean;
+  exposureTime: number; // in seconds
+  gain: number; // 0-100
+  binning: 1 | 2 | 3 | 4;
+  progress?: number; // 0-100 for exposure progress
+}
+
+export interface FocuserState {
+  connected: boolean;
+  moving: boolean;
+  position: number; // absolute position
+  temperature?: number; // in Celsius
+  maxPosition: number;
+}
+
+export interface CalibrationData {
+  polarAlignmentError?: number; // in arcminutes
+  polarAlignmentAz?: number; // azimuth correction in degrees
+  polarAlignmentAlt?: number; // altitude correction in degrees
+  lastCalibration?: string; // ISO timestamp
+}
+
+export interface SystemStatus {
+  telescope: TelescopeState;
+  camera: CameraState;
+  focuser: FocuserState;
+  calibration: CalibrationData;
+  lastUpdate: string; // ISO timestamp
+}
+
+// Command schemas for API
+export const telescopeCommandSchema = z.object({
+  action: z.enum([
+    "goto",
+    "slew",
+    "track",
+    "stop_tracking",
+    "park",
+    "unpark",
+    "home",
+    "stop",
+    "set_slew_rate",
+  ]),
+  target?: z.string().optional(),
+  ra?: z.number().min(0).max(24).optional(),
+  dec?: z.number().min(-90).max(90).optional(),
+  alt?: z.number().min(0).max(90).optional(),
+  az?: z.number().min(0).max(360).optional(),
+  slewRate?: z.number().min(1).max(4).optional(),
+});
+
+export type TelescopeCommand = z.infer<typeof telescopeCommandSchema>;
+
+export const cameraCommandSchema = z.object({
+  action: z.enum(["capture", "abort", "configure", "set_cooler"]),
+  exposureTime?: z.number().min(0.001).max(3600).optional(),
+  gain?: z.number().min(0).max(100).optional(),
+  binning?: z.enum([1, 2, 3, 4]).optional(),
+  coolerOn?: z.boolean().optional(),
+});
+
+export type CameraCommand = z.infer<typeof cameraCommandSchema>;
+
+export const focuserCommandSchema = z.object({
+  action: z.enum(["move_absolute", "move_relative", "stop"]),
+  position?: z.number().optional(),
+  steps?: z.number().optional(),
+});
+
+export type FocuserCommand = z.infer<typeof focuserCommandSchema>;
+
+export const calibrationCommandSchema = z.object({
+  action: z.enum(["start_polar_alignment", "complete_polar_alignment", "plate_solve"]),
+  azCorrection?: z.number().optional(),
+  altCorrection?: z.number().optional(),
+});
+
+export type CalibrationCommand = z.infer<typeof calibrationCommandSchema>;
+
+// Natural Language Processing result
+export const nlpResultSchema = z.object({
+  intent: z.enum([
+    "goto_target",
+    "track_object",
+    "stop_tracking",
+    "park",
+    "home",
+    "capture_image",
+    "adjust_focus",
+    "calibrate",
+    "get_status",
+    "unknown",
+  ]),
+  parameters: z.record(z.any()).optional(),
+  confidence: z.number().min(0).max(1),
+  explanation: z.string(),
+});
+
+export type NLPResult = z.infer<typeof nlpResultSchema>;

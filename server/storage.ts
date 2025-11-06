@@ -1,37 +1,127 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { 
+  type Command, 
+  type InsertCommand,
+  type CelestialTarget,
+  type InsertCelestialTarget 
+} from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
-
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Command History
+  createCommand(command: InsertCommand): Promise<Command>;
+  getCommandHistory(): Promise<Command[]>;
+  getCommand(id: string): Promise<Command | undefined>;
+  updateCommandStatus(id: string, status: string, result?: string): Promise<void>;
+  toggleCommandFavorite(id: string): Promise<void>;
+  clearCommandHistory(): Promise<void>;
+
+  // Celestial Targets
+  getCelestialTargets(): Promise<CelestialTarget[]>;
+  getCelestialTargetByName(name: string): Promise<CelestialTarget | undefined>;
+  createCelestialTarget(target: InsertCelestialTarget): Promise<CelestialTarget>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private commands: Map<string, Command>;
+  private celestialTargets: Map<string, CelestialTarget>;
 
   constructor() {
-    this.users = new Map();
+    this.commands = new Map();
+    this.celestialTargets = new Map();
+    this.initializeCelestialDatabase();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  // Initialize with common celestial objects
+  private initializeCelestialDatabase() {
+    const targets: InsertCelestialTarget[] = [
+      // Planets
+      { name: "Mars", type: "planet", ra: 1.5, dec: 15.0, magnitude: -2.0, constellation: "Aries", description: "The Red Planet" },
+      { name: "Jupiter", type: "planet", ra: 3.2, dec: 17.5, magnitude: -2.5, constellation: "Taurus", description: "Gas giant with Great Red Spot" },
+      { name: "Saturn", type: "planet", ra: 14.5, dec: -12.0, magnitude: 0.5, constellation: "Virgo", description: "The Ringed Planet" },
+      { name: "Venus", type: "planet", ra: 22.0, dec: -10.0, magnitude: -4.0, constellation: "Aquarius", description: "Evening Star" },
+      
+      // Deep Sky Objects
+      { name: "Andromeda Galaxy", type: "galaxy", ra: 0.71, dec: 41.27, magnitude: 3.4, constellation: "Andromeda", description: "M31, nearest major galaxy" },
+      { name: "Orion Nebula", type: "nebula", ra: 5.59, dec: -5.39, magnitude: 4.0, constellation: "Orion", description: "M42, stellar nursery" },
+      { name: "Pleiades", type: "cluster", ra: 3.79, dec: 24.12, magnitude: 1.6, constellation: "Taurus", description: "M45, Seven Sisters" },
+      { name: "Whirlpool Galaxy", type: "galaxy", ra: 13.5, dec: 47.2, magnitude: 8.4, constellation: "Canes Venatici", description: "M51, interacting galaxies" },
+      { name: "Ring Nebula", type: "nebula", ra: 18.89, dec: 33.03, magnitude: 8.8, constellation: "Lyra", description: "M57, planetary nebula" },
+      { name: "Hercules Cluster", type: "cluster", ra: 16.69, dec: 36.46, magnitude: 5.8, constellation: "Hercules", description: "M13, globular cluster" },
+      
+      // Bright Stars
+      { name: "Sirius", type: "star", ra: 6.75, dec: -16.72, magnitude: -1.46, constellation: "Canis Major", description: "Brightest star in the night sky" },
+      { name: "Vega", type: "star", ra: 18.62, dec: 38.78, magnitude: 0.03, constellation: "Lyra", description: "Summer Triangle star" },
+      { name: "Betelgeuse", type: "star", ra: 5.92, dec: 7.41, magnitude: 0.5, constellation: "Orion", description: "Red supergiant" },
+      { name: "Polaris", type: "star", ra: 2.53, dec: 89.26, magnitude: 1.98, constellation: "Ursa Minor", description: "North Star" },
+    ];
+
+    targets.forEach(target => {
+      const id = randomUUID();
+      this.celestialTargets.set(id, { ...target, id });
+    });
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
+  // Command methods
+  async createCommand(insertCommand: InsertCommand): Promise<Command> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const command: Command = { 
+      ...insertCommand, 
+      id,
+      timestamp: new Date(),
+    };
+    this.commands.set(id, command);
+    return command;
+  }
+
+  async getCommandHistory(): Promise<Command[]> {
+    return Array.from(this.commands.values())
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 50); // Return last 50 commands
+  }
+
+  async getCommand(id: string): Promise<Command | undefined> {
+    return this.commands.get(id);
+  }
+
+  async updateCommandStatus(id: string, status: string, result?: string): Promise<void> {
+    const command = this.commands.get(id);
+    if (command) {
+      command.status = status;
+      if (result !== undefined) {
+        command.result = result;
+      }
+      this.commands.set(id, command);
+    }
+  }
+
+  async toggleCommandFavorite(id: string): Promise<void> {
+    const command = this.commands.get(id);
+    if (command) {
+      command.isFavorite = !command.isFavorite;
+      this.commands.set(id, command);
+    }
+  }
+
+  async clearCommandHistory(): Promise<void> {
+    this.commands.clear();
+  }
+
+  // Celestial Target methods
+  async getCelestialTargets(): Promise<CelestialTarget[]> {
+    return Array.from(this.celestialTargets.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getCelestialTargetByName(name: string): Promise<CelestialTarget | undefined> {
+    return Array.from(this.celestialTargets.values())
+      .find(target => target.name.toLowerCase() === name.toLowerCase());
+  }
+
+  async createCelestialTarget(insertTarget: InsertCelestialTarget): Promise<CelestialTarget> {
+    const id = randomUUID();
+    const target: CelestialTarget = { ...insertTarget, id };
+    this.celestialTargets.set(id, target);
+    return target;
   }
 }
 
