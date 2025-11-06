@@ -116,13 +116,21 @@ client/src/
 ```
 server/
 ├── routes.ts         # API endpoints + WebSocket server
-├── storage.ts        # In-memory data store
+├── storage.ts        # PostgreSQL data store (DbStorage + legacy MemStorage)
 ├── services/
 │   ├── nlp.ts        # OpenAI command interpretation
 │   ├── telescope.ts  # Mock simulator + ASCOM client
 │   ├── camera.ts     # Camera control
 │   └── focuser.ts    # Focus control
 ```
+
+### Database
+- **PostgreSQL** via Neon serverless with Drizzle ORM
+- **Tables**:
+  - `commands` - Command history with favorites
+  - `celestial_targets` - Astronomical object database (14 pre-seeded targets)
+- **Auto-seeding**: Celestial targets initialized on first run
+- **WebSocket Support**: Configured via neonConfig for serverless compatibility
 
 ## API Endpoints
 
@@ -163,35 +171,33 @@ server/
 
 ## Development Status
 
-### Completed (Phase 1: Schema & Frontend)
+### Completed MVP (Phases 1-3)
 ✅ Complete data model and TypeScript interfaces  
-✅ Design tokens and color scheme configuration  
+✅ PostgreSQL database with Drizzle ORM  
+✅ Database auto-seeding (14 celestial targets)  
+✅ Command history persisted to database  
 ✅ All React components with exceptional visual polish  
-✅ Command input with natural language processing UI  
-✅ Telescope viewport with real-time position display  
-✅ Position, tracking, camera, focus, and calibration controls  
-✅ Real-time status dashboard with color-coded indicators  
-✅ Command history with favorites  
-✅ Connection toggle (ASCOM/Mock)  
-✅ Emergency stop and park controls  
+✅ OpenAI natural language processing service  
+✅ Mock telescope simulator with realistic state  
+✅ ASCOM Alpaca REST client  
+✅ WebSocket real-time updates (bidirectional)  
+✅ Complete API endpoint implementation  
+✅ Frontend-backend integration via React Query  
+✅ Comprehensive error handling  
+✅ End-to-end testing validated  
 ✅ Dark mode optimized for night vision  
-✅ Responsive layout for desktop and tablet  
 
-### In Progress (Phase 2: Backend)
-⏳ OpenAI natural language processing service  
-⏳ Mock telescope simulator  
-⏳ ASCOM Alpaca REST client  
-⏳ WebSocket real-time updates  
-⏳ API endpoint implementation  
-⏳ Command execution engine  
+### In Progress (Phase 4: Advanced Features)
+⏳ Automated imaging sequences with scripting engine  
+⏳ Advanced plate solving for positioning verification  
+⏳ Observing session planner with weather integration  
+⏳ Multi-mount support for telescope arrays  
+⏳ PHD2 integration for autoguiding control  
 
-### Planned (Phase 3: Integration & Polish)
-📋 Connect frontend to backend APIs  
-📋 WebSocket client integration  
-📋 Error handling and loading states  
-📋 End-to-end testing  
-📋 Architect review  
-📋 Final polish and optimizations  
+### Future Enhancements
+📋 Export command sequences as scripts  
+📋 Cloud storage for imaging sessions  
+📋 Mobile app companion  
 
 ## Environment Variables
 

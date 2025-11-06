@@ -110,38 +110,38 @@ export const telescopeCommandSchema = z.object({
     "stop",
     "set_slew_rate",
   ]),
-  target?: z.string().optional(),
-  ra?: z.number().min(0).max(24).optional(),
-  dec?: z.number().min(-90).max(90).optional(),
-  alt?: z.number().min(0).max(90).optional(),
-  az?: z.number().min(0).max(360).optional(),
-  slewRate?: z.number().min(1).max(4).optional(),
+  target: z.string().optional(),
+  ra: z.number().min(0).max(24).optional(),
+  dec: z.number().min(-90).max(90).optional(),
+  alt: z.number().min(0).max(90).optional(),
+  az: z.number().min(0).max(360).optional(),
+  slewRate: z.number().min(1).max(4).optional(),
 });
 
 export type TelescopeCommand = z.infer<typeof telescopeCommandSchema>;
 
 export const cameraCommandSchema = z.object({
   action: z.enum(["capture", "abort", "configure", "set_cooler"]),
-  exposureTime?: z.number().min(0.001).max(3600).optional(),
-  gain?: z.number().min(0).max(100).optional(),
-  binning?: z.enum([1, 2, 3, 4]).optional(),
-  coolerOn?: z.boolean().optional(),
+  exposureTime: z.number().min(0.001).max(3600).optional(),
+  gain: z.number().min(0).max(100).optional(),
+  binning: z.number().min(1).max(4).optional(),
+  coolerOn: z.boolean().optional(),
 });
 
 export type CameraCommand = z.infer<typeof cameraCommandSchema>;
 
 export const focuserCommandSchema = z.object({
   action: z.enum(["move_absolute", "move_relative", "stop"]),
-  position?: z.number().optional(),
-  steps?: z.number().optional(),
+  position: z.number().optional(),
+  steps: z.number().optional(),
 });
 
 export type FocuserCommand = z.infer<typeof focuserCommandSchema>;
 
 export const calibrationCommandSchema = z.object({
   action: z.enum(["start_polar_alignment", "complete_polar_alignment", "plate_solve"]),
-  azCorrection?: z.number().optional(),
-  altCorrection?: z.number().optional(),
+  azCorrection: z.number().optional(),
+  altCorrection: z.number().optional(),
 });
 
 export type CalibrationCommand = z.infer<typeof calibrationCommandSchema>;
