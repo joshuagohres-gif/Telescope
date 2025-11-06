@@ -19,8 +19,9 @@ This application enables astronomers to control precision telescope systems thro
 - **Express.js** for API server
 - **OpenAI GPT-5** for natural language command interpretation (via Replit AI Integrations)
 - **WebSocket server** for real-time bidirectional communication
-- **In-memory storage** for command history and celestial object database
+- **PostgreSQL database** (Neon serverless) for persistent storage via Drizzle ORM
 - **ASCOM Alpaca REST** client for telescope hardware communication
+- **Automated imaging sequence executor** with retry logic and error recovery
 
 ## Features
 
@@ -203,12 +204,18 @@ server/
 ✅ Dark mode optimized for night vision  
 
 ### Completed (Phase 4: Advanced Features)
-✅ Automated imaging sequences - Backend infrastructure complete
-  - Database schema for sequences and frames
-  - Sequence execution engine with pause/resume
-  - API endpoints for sequence management
-  - Frame-level control (exposure, filter, binning, dithering)
-  - Progress tracking and status updates
+✅ **Automated Imaging Sequences** - Complete backend implementation
+  - Database schema: `imaging_sequences` and `imaging_sequence_frames` tables
+  - ImagingSequenceExecutor service with full lifecycle management (start/pause/resume/stop)
+  - 10 API endpoints for CRUD and sequence control
+  - Frame-level control (exposure time, filter, gain, binning, dithering)
+  - Deterministic frame ordering via SQL `orderBy(orderIndex, id)`
+  - Real-time progress tracking with cache synchronization
+  - Automatic error recovery: 3-retry policy with exponential backoff
+  - Comprehensive error handling: prevents hung states, accurate status transitions
+  - Status states: pending → running → paused/stopped/completed/failed
+  - Resume support: seeds progress from persisted frame data
+  - No unhandled promise rejections
 
 ### In Progress (Phase 4 Continued)
 ⏳ Imaging sequence frontend UI (planner, templates, monitoring)
@@ -237,7 +244,7 @@ The application runs via the "Start application" workflow which executes `npm ru
 
 ## Future Enhancements
 
-- Automated imaging sequences and scripting
+- Imaging sequence frontend UI (planner, templates, monitoring dashboard)
 - Advanced plate solving for precise positioning
 - Observing session planner with weather integration
 - Multi-mount support for telescope arrays
