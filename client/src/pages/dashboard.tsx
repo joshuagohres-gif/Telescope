@@ -8,11 +8,12 @@ import { TrackingControl } from "@/components/telescope/tracking-control";
 import { CameraControl } from "@/components/telescope/camera-control";
 import { FocusControl } from "@/components/telescope/focus-control";
 import { CalibrationControl } from "@/components/telescope/calibration-control";
+import { SequenceManager } from "@/components/telescope/sequence-manager";
 import { StatusDashboard } from "@/components/telescope/status-dashboard";
 import { CommandHistory } from "@/components/telescope/command-history";
 import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
-import { Telescope, Target, Camera, Focus, Settings } from "lucide-react";
+import { Telescope, Target, Camera, Focus, Settings, Film } from "lucide-react";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("position");
@@ -48,7 +49,7 @@ export default function Dashboard() {
             
             <Card className="p-6" data-testid="card-control-panels">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-5 w-full">
+                <TabsList className="grid grid-cols-6 w-full">
                   <TabsTrigger value="position" className="gap-2" data-testid="tab-position">
                     <Telescope className="w-4 h-4" />
                     <span className="hidden sm:inline">Position</span>
@@ -60,6 +61,10 @@ export default function Dashboard() {
                   <TabsTrigger value="camera" className="gap-2" data-testid="tab-camera">
                     <Camera className="w-4 h-4" />
                     <span className="hidden sm:inline">Camera</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="sequences" className="gap-2" data-testid="tab-sequences">
+                    <Film className="w-4 h-4" />
+                    <span className="hidden sm:inline">Sequences</span>
                   </TabsTrigger>
                   <TabsTrigger value="focus" className="gap-2" data-testid="tab-focus">
                     <Focus className="w-4 h-4" />
@@ -80,6 +85,9 @@ export default function Dashboard() {
                   </TabsContent>
                   <TabsContent value="camera" className="mt-0">
                     <CameraControl />
+                  </TabsContent>
+                  <TabsContent value="sequences" className="mt-0">
+                    <SequenceManager />
                   </TabsContent>
                   <TabsContent value="focus" className="mt-0">
                     <FocusControl />

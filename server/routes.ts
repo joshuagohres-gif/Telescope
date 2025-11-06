@@ -503,6 +503,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(sequences);
   });
 
+  // IMPORTANT: /active route must come before /:id to avoid Express treating "active" as an ID
+  app.get("/api/sequences/active", async (req, res) => {
+    const activeSequence = imagingSequenceExecutor.getActiveSequence();
+    const progress = imagingSequenceExecutor.getCurrentProgress();
+    
+    if (!activeSequence) {
+      return res.status(404).json({ error: "No active sequence" });
+    }
+
+    // Return formatted response matching frontend expectations
+    res.json({
+      sequenceId: activeSequence.id,
+      name: activeSequence.name,
+      targetName: activeSequence.targetName,
+      status: activeSequence.status,
+      completedFrames: activeSequence.completedFrames,
+      totalFrames: activeSequence.totalFrames,
+      estimatedDuration: activeSequence.estimatedDuration,
+      currentFrame: progress?.currentFrame || 0,
+    });
+  });
+
   app.get("/api/sequences/:id", async (req, res) => {
     const sequence = await storage.getImagingSequence(req.params.id);
     if (!sequence) {
@@ -567,12 +589,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
-  });
-
-  app.get("/api/sequences/active", async (req, res) => {
-    const active = imagingSequenceExecutor.getActiveSequence();
-    const progress = imagingSequenceExecutor.getCurrentProgress();
-    res.json({ sequence: active, progress });
   });
 
   return httpServer;

@@ -99,7 +99,9 @@ export class ImagingSequenceExecutor {
     try {
       const frames = await storage.getImagingSequenceFrames(sequenceId);
       const sequence = await storage.getImagingSequence(sequenceId);
-      if (!sequence) return;
+      if (!sequence) {
+        return;
+      }
 
       // Initialize totalCompleted from already-completed frames (for resume support)
       let totalCompleted = frames.reduce((sum, frame) => sum + frame.completed, 0);

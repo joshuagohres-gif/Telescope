@@ -204,21 +204,31 @@ server/
 ✅ Dark mode optimized for night vision  
 
 ### Completed (Phase 4: Advanced Features)
-✅ **Automated Imaging Sequences** - Complete backend implementation
-  - Database schema: `imaging_sequences` and `imaging_sequence_frames` tables
-  - ImagingSequenceExecutor service with full lifecycle management (start/pause/resume/stop)
-  - 10 API endpoints for CRUD and sequence control
-  - Frame-level control (exposure time, filter, gain, binning, dithering)
-  - Deterministic frame ordering via SQL `orderBy(orderIndex, id)`
-  - Real-time progress tracking with cache synchronization
-  - Automatic error recovery: 3-retry policy with exponential backoff
-  - Comprehensive error handling: prevents hung states, accurate status transitions
-  - Status states: pending → running → paused/stopped/completed/failed
-  - Resume support: seeds progress from persisted frame data
-  - No unhandled promise rejections
+✅ **Automated Imaging Sequences** - Complete end-to-end implementation
+  - **Backend**:
+    - Database schema: `imaging_sequences` and `imaging_sequence_frames` tables
+    - ImagingSequenceExecutor service with full lifecycle management (start/pause/resume/stop)
+    - 10 API endpoints for CRUD and sequence control
+    - Frame-level control (exposure time, filter, gain, binning, dithering)
+    - Deterministic frame ordering via SQL `orderBy(orderIndex, id)`
+    - Real-time progress tracking with cache synchronization
+    - Automatic error recovery: 3-retry policy with exponential backoff
+    - Comprehensive error handling: prevents hung states, accurate status transitions
+    - Status states: pending → running → paused/stopped/completed/failed
+    - Resume support: seeds progress from persisted frame data
+    - Route ordering fix: `/api/sequences/active` before `/:id` to prevent 404 errors
+  - **Frontend UI**:
+    - Complete dialog-based interface with React Hook Form + Zod validation
+    - Create Sequence dialog: name, target (from DB), total frames, estimated duration
+    - Add Frame dialog: frame type, filter, exposure, gain, binning, count
+    - Active Sequence monitor with real-time progress tracking
+    - Pause/Resume/Stop controls with proper state management
+    - Sequence list with status badges, start/delete actions
+    - Graceful 404 handling for "no active sequence" state
+    - Type-safe form submissions with Zod numeric coercion
+    - End-to-end tested via Playwright automation
 
 ### In Progress (Phase 4 Continued)
-⏳ Imaging sequence frontend UI (planner, templates, monitoring)
 ⏳ Advanced plate solving for positioning verification  
 ⏳ Observing session planner with weather integration  
 ⏳ Multi-mount support for telescope arrays  
