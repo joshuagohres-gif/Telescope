@@ -18,7 +18,7 @@ export class AscomTelescopeClient {
   private deviceNumber: number;
   private clientId: number;
 
-  constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
+  constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
@@ -285,7 +285,7 @@ export class AscomCameraClient {
   private deviceNumber: number;
   private clientId: number;
 
-  constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
+  constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
@@ -454,7 +454,7 @@ export class AscomFocuserClient {
   private deviceNumber: number;
   private clientId: number;
 
-  constructor(baseUrl: string = "http://localhost:11111", deviceNumber: number = 0) {
+  constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
@@ -563,7 +563,7 @@ export class AscomFocuserClient {
 export class AscomDiscovery {
   private baseUrl: string;
 
-  constructor(baseUrl: string = "http://localhost:11111") {
+  constructor(baseUrl: string = "http://localhost:32323") {
     this.baseUrl = baseUrl;
   }
 
@@ -573,7 +573,14 @@ export class AscomDiscovery {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      return await response.json();
+      const data = await response.json();
+
+      // ASCOM wraps the response in a Value property
+      if (data.ErrorNumber !== 0) {
+        throw new Error(data.ErrorMessage || 'Unknown ASCOM error');
+      }
+
+      return data.Value || data;
     } catch (error: any) {
       throw new Error(`Device discovery failed: ${error.message}`);
     }
@@ -585,7 +592,18 @@ export class AscomDiscovery {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      return await response.json();
+      const data = await response.json();
+
+      // ASCOM wraps the response in a Value property
+      if (data.ErrorNumber !== 0) {
+        throw new Error(data.ErrorMessage || 'Unknown ASCOM error');
+      }
+
+      // Return server info with API versions
+      return {
+        APIVersions: data.Value || [],
+        ServerTransactionID: data.ServerTransactionID
+      };
     } catch (error: any) {
       throw new Error(`Failed to get server info: ${error.message}`);
     }
