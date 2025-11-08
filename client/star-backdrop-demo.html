@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Star Backdrop Demo - Telescope Control</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    #sky-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    #controls {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 400px;
+      z-index: 10;
+      backdrop-filter: blur(10px);
+    }
+
+    h1 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #4a9eff;
+    }
+
+    .info-group {
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #333;
+    }
+
+    .info-group:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+
+    .info-value {
+      font-size: 14px;
+      color: #fff;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    button {
+      background: #4a9eff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 15px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-top: 5px;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #3a8eef;
+    }
+
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: #ff6b6b;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .success {
+      color: #51cf66;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .loading {
+      color: #4a9eff;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .camera-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .camera-controls button {
+      margin: 0;
+      padding: 8px;
+      font-size: 12px;
+    }
+
+    #status {
+      min-height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="sky-container"></div>
+
+  <div id="controls">
+    <h1>Star Backdrop Demo</h1>
+
+    <div class="info-group">
+      <div class="info-label">Location</div>
+      <div class="info-value" id="location">Detecting...</div>
+      <button id="btn-get-location">Get Location</button>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Local Time</div>
+      <div class="info-value" id="local-time">--</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Visible Stars</div>
+      <div class="info-value" id="star-count">--</div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Camera Controls</div>
+      <div class="camera-controls">
+        <button id="btn-north">North</button>
+        <button id="btn-south">South</button>
+        <button id="btn-east">East</button>
+        <button id="btn-west">West</button>
+        <button id="btn-zenith">Zenith</button>
+        <button id="btn-horizon">Horizon</button>
+      </div>
+    </div>
+
+    <div class="info-group">
+      <div class="info-label">Field of View: <span id="fov-value">60</span>°</div>
+      <input type="range" id="fov-slider" min="10" max="120" value="60">
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script type="module">
+    // This is a demo file - in production, these would be proper imports
+    // For now, we'll simulate the functionality to test the UI
+
+    console.log('Star Backdrop Demo loaded');
+
+    // Simulate location detection
+    let currentLocation = null;
+    let backdrop = null;
+
+    // Update time display
+    function updateTimeDisplay() {
+      const now = new Date();
+      document.getElementById('local-time').textContent = now.toLocaleString();
+    }
+
+    setInterval(updateTimeDisplay, 1000);
+    updateTimeDisplay();
+
+    // Status display helper
+    function setStatus(message, type = 'info') {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = type;
+    }
+
+    // Location button
+    document.getElementById('btn-get-location').addEventListener('click', async () => {
+      setStatus('Requesting location...', 'loading');
+
+      try {
+        // Request GPS location
+        if (!navigator.geolocation) {
+          throw new Error('Geolocation not supported');
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            currentLocation = { latitude, longitude };
+
+            const lat = Math.abs(latitude).toFixed(4);
+            const latDir = latitude >= 0 ? 'N' : 'S';
+            const lon = Math.abs(longitude).toFixed(4);
+            const lonDir = longitude >= 0 ? 'E' : 'W';
+
+            document.getElementById('location').textContent =
+              `${lat}° ${latDir}, ${lon}° ${lonDir} (±${Math.round(accuracy)}m, GPS)`;
+
+            setStatus('Location acquired!', 'success');
+
+            // In production, this would initialize the star backdrop
+            // For now, simulate star count
+            document.getElementById('star-count').textContent =
+              Math.floor(Math.random() * 5 + 10) + ' stars visible';
+          },
+          (error) => {
+            let errorMsg = 'GPS error';
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMsg = 'Location permission denied. Using IP fallback...';
+                // In production, would try IP geolocation here
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMsg = 'Position unavailable';
+                break;
+              case error.TIMEOUT:
+                errorMsg = 'Location request timed out';
+                break;
+            }
+            setStatus(errorMsg, 'error');
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000
+          }
+        );
+      } catch (error) {
+        setStatus(`Error: ${error.message}`, 'error');
+      }
+    });
+
+    // Camera controls
+    const cameraSteps = Math.PI / 6; // 30 degrees
+
+    document.getElementById('btn-north').addEventListener('click', () => {
+      console.log('Point North (Az: 0°)');
+      setStatus('Looking North');
+    });
+
+    document.getElementById('btn-south').addEventListener('click', () => {
+      console.log('Point South (Az: 180°)');
+      setStatus('Looking South');
+    });
+
+    document.getElementById('btn-east').addEventListener('click', () => {
+      console.log('Point East (Az: 90°)');
+      setStatus('Looking East');
+    });
+
+    document.getElementById('btn-west').addEventListener('click', () => {
+      console.log('Point West (Az: 270°)');
+      setStatus('Looking West');
+    });
+
+    document.getElementById('btn-zenith').addEventListener('click', () => {
+      console.log('Point at Zenith (Alt: 90°)');
+      setStatus('Looking at Zenith');
+    });
+
+    document.getElementById('btn-horizon').addEventListener('click', () => {
+      console.log('Point at Horizon (Alt: 0°)');
+      setStatus('Looking at Horizon');
+    });
+
+    // FOV slider
+    document.getElementById('fov-slider').addEventListener('input', (e) => {
+      const fov = e.target.value;
+      document.getElementById('fov-value').textContent = fov;
+      console.log(`FOV: ${fov}°`);
+    });
+
+    // Auto-detect location on load
+    setStatus('Ready. Click "Get Location" to start.', 'info');
+
+    console.log('Demo UI initialized. WebGL renderer would initialize here.');
+    console.log('Files to import in production:');
+    console.log('  - import { StarBackdrop } from "./src/simulatedSkyBackdrop";');
+    console.log('  - import { locationService } from "./src/utils/locationService";');
+  </script>
+</body>
+</html>

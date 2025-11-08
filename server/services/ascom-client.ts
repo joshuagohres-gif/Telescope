@@ -17,25 +17,28 @@ export class AscomTelescopeClient {
   private baseUrl: string;
   private deviceNumber: number;
   private clientId: number;
+  private transactionCounter: number;
 
   constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
+    this.transactionCounter = 0;
   }
 
   private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
     const url = new URL(`${this.baseUrl}/api/v1/telescope/${this.deviceNumber}/${endpoint}`);
-    
+
     // Add client ID and transaction ID (required by ASCOM)
+    // ASCOM expects Int32 values, so we use a counter instead of Date.now()
     params.ClientID = params.ClientID || this.clientId;
-    params.ClientTransactionID = params.ClientTransactionID || Date.now();
+    params.ClientTransactionID = params.ClientTransactionID || ++this.transactionCounter;
 
     const options: RequestInit = {
       method: method,
-      headers: {
+      headers: method !== 'GET' ? {
         'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      } : {},
     };
 
     if (method === 'GET') {
@@ -44,12 +47,16 @@ export class AscomTelescopeClient {
       options.body = new URLSearchParams(params).toString();
     }
 
+    console.log(`[ASCOM Telescope] ${method} ${url.toString()}`, method !== 'GET' ? options.body : '');
+
     try {
       const response = await fetch(url.toString(), options);
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[ASCOM Telescope] HTTP ${response.status}: ${response.statusText} - ${errorText}`);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const data: AscomResponse<T> = await response.json();
 
       if (data.ErrorNumber !== 0) {
@@ -64,7 +71,9 @@ export class AscomTelescopeClient {
 
   // Connection
   async connect(): Promise<void> {
+    console.log('[ASCOM Telescope] Connecting...');
     await this.request<void>('PUT', 'connected', { Connected: true });
+    console.log('[ASCOM Telescope] Connected successfully');
   }
 
   async disconnect(): Promise<void> {
@@ -72,7 +81,14 @@ export class AscomTelescopeClient {
   }
 
   async isConnected(): Promise<boolean> {
-    return await this.request<boolean>('GET', 'connected');
+    try {
+      const result = await this.request<boolean>('GET', 'connected');
+      console.log(`[ASCOM Telescope] isConnected result:`, result);
+      return result;
+    } catch (error: any) {
+      console.error(`[ASCOM Telescope] isConnected error:`, error.message);
+      throw error;
+    }
   }
 
   // Capabilities - check what the telescope supports
@@ -284,24 +300,26 @@ export class AscomCameraClient {
   private baseUrl: string;
   private deviceNumber: number;
   private clientId: number;
+  private transactionCounter: number;
 
   constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
+    this.transactionCounter = 0;
   }
 
   private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
     const url = new URL(`${this.baseUrl}/api/v1/camera/${this.deviceNumber}/${endpoint}`);
-    
+
     params.ClientID = params.ClientID || this.clientId;
-    params.ClientTransactionID = params.ClientTransactionID || Date.now();
+    params.ClientTransactionID = params.ClientTransactionID || ++this.transactionCounter;
 
     const options: RequestInit = {
       method: method,
-      headers: {
+      headers: method !== 'GET' ? {
         'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      } : {},
     };
 
     if (method === 'GET') {
@@ -330,7 +348,9 @@ export class AscomCameraClient {
 
   // Connection
   async connect(): Promise<void> {
+    console.log('[ASCOM Camera] Connecting...');
     await this.request<void>('PUT', 'connected', { Connected: true });
+    console.log('[ASCOM Camera] Connected successfully');
   }
 
   async disconnect(): Promise<void> {
@@ -338,7 +358,14 @@ export class AscomCameraClient {
   }
 
   async isConnected(): Promise<boolean> {
-    return await this.request<boolean>('GET', 'connected');
+    try {
+      const result = await this.request<boolean>('GET', 'connected');
+      console.log(`[ASCOM Camera] isConnected result:`, result);
+      return result;
+    } catch (error: any) {
+      console.error(`[ASCOM Camera] isConnected error:`, error.message);
+      throw error;
+    }
   }
 
   // Camera capabilities
@@ -453,24 +480,26 @@ export class AscomFocuserClient {
   private baseUrl: string;
   private deviceNumber: number;
   private clientId: number;
+  private transactionCounter: number;
 
   constructor(baseUrl: string = "http://localhost:32323", deviceNumber: number = 0) {
     this.baseUrl = baseUrl;
     this.deviceNumber = deviceNumber;
     this.clientId = Math.floor(Math.random() * 10000);
+    this.transactionCounter = 0;
   }
 
   private async request<T>(method: string, endpoint: string, params: Record<string, any> = {}): Promise<T> {
     const url = new URL(`${this.baseUrl}/api/v1/focuser/${this.deviceNumber}/${endpoint}`);
-    
+
     params.ClientID = params.ClientID || this.clientId;
-    params.ClientTransactionID = params.ClientTransactionID || Date.now();
+    params.ClientTransactionID = params.ClientTransactionID || ++this.transactionCounter;
 
     const options: RequestInit = {
       method: method,
-      headers: {
+      headers: method !== 'GET' ? {
         'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      } : {},
     };
 
     if (method === 'GET') {
@@ -499,7 +528,9 @@ export class AscomFocuserClient {
 
   // Connection
   async connect(): Promise<void> {
+    console.log('[ASCOM Focuser] Connecting...');
     await this.request<void>('PUT', 'connected', { Connected: true });
+    console.log('[ASCOM Focuser] Connected successfully');
   }
 
   async disconnect(): Promise<void> {
@@ -507,7 +538,14 @@ export class AscomFocuserClient {
   }
 
   async isConnected(): Promise<boolean> {
-    return await this.request<boolean>('GET', 'connected');
+    try {
+      const result = await this.request<boolean>('GET', 'connected');
+      console.log(`[ASCOM Focuser] isConnected result:`, result);
+      return result;
+    } catch (error: any) {
+      console.error(`[ASCOM Focuser] isConnected error:`, error.message);
+      throw error;
+    }
   }
 
   // Focuser capabilities

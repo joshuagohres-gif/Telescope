@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import type { SystemStatus } from "@shared/schema";
 import { Crosshair, Navigation } from "lucide-react";
+import { StarBackdropView } from "./star-backdrop-view";
 
 export function TelescopeViewport() {
   const { data: status } = useQuery<SystemStatus>({
@@ -52,19 +53,17 @@ export function TelescopeViewport() {
 
       {/* Visual Representation */}
       <div className="relative w-full aspect-video bg-gradient-to-b from-card to-muted/30 rounded-md border border-border mb-6 overflow-hidden">
-        {/* Star field background */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-[10%] left-[20%] w-1 h-1 bg-white rounded-full" />
-          <div className="absolute top-[30%] left-[70%] w-1 h-1 bg-white rounded-full" />
-          <div className="absolute top-[60%] left-[40%] w-0.5 h-0.5 bg-white rounded-full" />
-          <div className="absolute top-[80%] left-[60%] w-1 h-1 bg-white rounded-full" />
-          <div className="absolute top-[25%] left-[50%] w-0.5 h-0.5 bg-white rounded-full" />
-          <div className="absolute top-[70%] left-[15%] w-1 h-1 bg-white rounded-full" />
-          <div className="absolute top-[45%] left-[85%] w-0.5 h-0.5 bg-white rounded-full" />
-        </div>
+        {/* Real star backdrop */}
+        <StarBackdropView
+          ra={position?.ra}
+          dec={position?.dec}
+          alt={position?.alt}
+          az={position?.az}
+          enabled={telescope?.connected}
+        />
 
         {/* Crosshair center */}
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="relative">
             <div className="w-12 h-12 border-2 border-primary rounded-full opacity-50" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 bg-primary rounded-full" />
@@ -74,7 +73,7 @@ export function TelescopeViewport() {
         </div>
 
         {/* Status overlay */}
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 pointer-events-none">
           {telescope?.slewing && (
             <Badge variant="default" className="bg-telescope-slewing text-white gap-2" data-testid="badge-slewing">
               <div className="w-2 h-2 bg-white rounded-full animate-pulse" />

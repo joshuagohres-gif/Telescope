@@ -13,6 +13,7 @@ import { StatusDashboard } from "@/components/telescope/status-dashboard";
 import { CommandHistory } from "@/components/telescope/command-history";
 import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
+import { DeviceDiscovery } from "@/components/telescope/device-discovery";
 import { Telescope, Target, Camera, Focus, Settings, Film } from "lucide-react";
 
 export default function Dashboard() {
@@ -28,6 +29,7 @@ export default function Dashboard() {
             <h1 className="text-xl font-semibold" data-testid="text-app-title">Telescope Control System</h1>
           </div>
           <div className="flex items-center gap-3">
+            <DeviceDiscovery />
             <ConnectionToggle />
             <EmergencyControls />
           </div>

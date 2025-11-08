@@ -1,0 +1,26 @@
+# Additional exclude patterns for LOC reporting
+# (node_modules, .git, dist, build, etc. are already excluded by default)
+
+# Editor and IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Lock files already excluded by pattern, but being explicit
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build artifacts
+*.tsbuildinfo
+.turbo

@@ -37,10 +37,20 @@ let statusInterval: NodeJS.Timeout | null = null;
 async function getAscomStatus(): Promise<SystemStatus> {
   try {
     const [telConnected, camConnected, focConnected] = await Promise.all([
-      ascomTelescope.isConnected().catch(() => false),
-      ascomCamera.isConnected().catch(() => false),
-      ascomFocuser.isConnected().catch(() => false),
+      ascomTelescope.isConnected().catch((err) => {
+        console.error('[Routes] Telescope isConnected error:', err);
+        return false;
+      }),
+      ascomCamera.isConnected().catch((err) => {
+        console.error('[Routes] Camera isConnected error:', err);
+        return false;
+      }),
+      ascomFocuser.isConnected().catch((err) => {
+        console.error('[Routes] Focuser isConnected error:', err);
+        return false;
+      }),
     ]);
+    console.log('[Routes] getAscomStatus - telConnected:', telConnected, 'camConnected:', camConnected, 'focConnected:', focConnected);
 
     // Telescope status
     let telescopeState = {
@@ -404,7 +414,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/telescope/connect", async (req, res) => {
     try {
       const { type } = req.body;
-      
+      console.log('[Routes] Connect request - type:', type);
+
       if (type !== "mock" && type !== "ascom") {
         return res.status(400).json({ error: "Invalid connection type" });
       }
@@ -416,16 +427,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         startStatusBroadcast();
       } else {
         // Connect to all ASCOM devices that are available
-        await Promise.allSettled([
+        console.log('[Routes] Connecting to ASCOM devices...');
+        const results = await Promise.allSettled([
           ascomTelescope.connect(),
           ascomCamera.connect(),
           ascomFocuser.connect(),
         ]);
+        console.log('[Routes] Connection results:', results.map((r, i) =>
+          ({ device: ['telescope', 'camera', 'focuser'][i], status: r.status, reason: r.status === 'rejected' ? r.reason : 'ok' })
+        ));
         startStatusBroadcast();
       }
 
       res.json({ success: true, type });
     } catch (error: any) {
+      console.error('[Routes] Connect error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -570,6 +586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error: any) {
+      console.error('[Routes] /api/telescope/slew error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -588,23 +605,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await telescopeSimulator.gotoCoordinates(celestialTarget.ra, celestialTarget.dec);
         telescopeSimulator.startTracking(celestialTarget.name);
       } else if (activeConnection === "ascom") {
-        // Slew to target
+        // First, check if telescope is parked and unpark if necessary
+        const isParked = await ascomTelescope.isParked().catch(() => false);
+        if (isParked) {
+          const canUnpark = await ascomTelescope.canUnpark().catch(() => false);
+          if (canUnpark) {
+            await ascomTelescope.unpark();
+          }
+        }
+
+        // Enable tracking FIRST (required by ASCOM before slewing)
+        const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+        if (canSetTracking) {
+          await ascomTelescope.setTracking(true);
+        }
+
+        // Then slew to target
         const canSlewAsync = await ascomTelescope.canSlewAsync().catch(() => false);
         if (canSlewAsync) {
           await ascomTelescope.slewToCoordinatesAsync(celestialTarget.ra, celestialTarget.dec);
         } else {
           await ascomTelescope.slewToCoordinates(celestialTarget.ra, celestialTarget.dec);
         }
-        
-        // Enable tracking if supported
-        const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
-        if (canSetTracking) {
-          await ascomTelescope.setTracking(true);
-        }
       }
 
       res.json({ success: true });
     } catch (error: any) {
+      console.error('[Routes] /api/telescope/track error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -682,6 +709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ success: true });
     } catch (error: any) {
+      console.error('[Routes] /api/telescope/home error:', error);
       res.status(500).json({ error: error.message });
     }
   });
