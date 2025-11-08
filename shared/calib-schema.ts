@@ -41,32 +41,42 @@ export const opticalTrain = pgTable('calib_optical_train', {
 
 // Master calibration frames
 export const frameTypeEnum = pgEnum('frame_type', ['bias', 'dark', 'flat', 'darkflat']);
+export const kindEnum = pgEnum('frame_kind', ['dark', 'bias', 'flat', 'darkflat']);
 
 export const masterFrame = pgTable('calib_master_frame', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   trainId: uuid('train_id').notNull().references(() => opticalTrain.id, { onDelete: 'cascade' }),
-  frameType: frameTypeEnum('frame_type').notNull(),
-  filterName: varchar('filter_name', { length: 64 }),
+  kind: kindEnum('kind').notNull(), // Spec column name
+  frameType: frameTypeEnum('frame_type'), // Legacy column
+  filter: varchar('filter', { length: 64 }), // Spec column name
+  filterName: varchar('filter_name', { length: 64 }), // Legacy column
+  sensorTempC: real('sensor_temp_c'), // Spec column name
+  tempC: real('temp_c'), // Legacy column
+  gain: varchar('gain', { length: 32 }), // Spec: TEXT
+  gainInt: integer('gain_int'), // Legacy integer gain
+  exposureS: real('exposure_s'), // Spec column name
+  exposureSec: real('exposure_sec'), // Legacy column
+  hash: varchar('hash', { length: 256 }).unique(), // Spec column
+  s3Url: text('s3_url'), // Spec column name
+  s3Key: text('s3_key'), // Legacy column
   binning: varchar('binning', { length: 16 }).notNull().default('1x1'),
-  tempC: real('temp_c'),
-  exposureSec: real('exposure_sec'),
-  gain: integer('gain'),
   offset: integer('offset'),
   frameCount: integer('frame_count').notNull(),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
-  s3Key: text('s3_key').notNull(),
   statsJson: jsonb('stats_json').$type<{ mean: number; median: number; stddev: number; min: number; max: number }>(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   trainIdx: index('calib_master_train_idx').on(table.trainId),
   typeIdx: index('calib_master_type_idx').on(table.frameType),
-  filterIdx: index('calib_master_filter_idx').on(table.filterName),
+  filterIdx: index('calib_master_filter_idx').on(table.filter),
+  // Spec index: (train_id, kind, filter, sensor_temp_c, gain, exposure_s)
+  specIdx: index('calib_master_spec_idx').on(table.trainId, table.kind, table.filter, table.sensorTempC, table.gain, table.exposureS),
 }));
 
 // Frame quality index
 export const frameIndex = pgTable('calib_frame_index', {
   id: serial('id').primaryKey(),
-  masterId: integer('master_id').notNull().references(() => masterFrame.id, { onDelete: 'cascade' }),
+  masterId: uuid('master_id').notNull().references(() => masterFrame.id, { onDelete: 'cascade' }),
   tag: varchar('tag', { length: 128 }).notNull(),
   value: text('value').notNull(),
 }, (table) => ({
@@ -79,10 +89,13 @@ export const focusSample = pgTable('calib_focus_sample', {
   trainId: uuid('train_id').notNull().references(() => opticalTrain.id, { onDelete: 'cascade' }),
   sessionId: uuid('session_id'),
   ts: timestamp('ts', { withTimezone: true }).notNull(),
-  focuserPos: integer('focuser_pos').notNull(),
-  tempC: real('temp_c'),
-  filterName: varchar('filter_name', { length: 64 }),
-  hfr: real('hfr').notNull(),
+  filter: varchar('filter', { length: 64 }), // Spec column name
+  filterName: varchar('filter_name', { length: 64 }), // Legacy column
+  tempC: real('temp_c').notNull(), // Spec column
+  position: integer('position').notNull(), // Spec column name
+  focuserPos: integer('focuser_pos'), // Legacy column
+  hfr: real('hfr').notNull(), // Spec column
+  exposureS: real('exposure_s'), // Spec column
   fwhm: real('fwhm'),
   starCount: integer('star_count').notNull(),
 }, (table) => ({
@@ -95,17 +108,21 @@ export const focusSample = pgTable('calib_focus_sample', {
 export const focusProfile = pgTable('calib_focus_profile', {
   id: serial('id').primaryKey(),
   trainId: uuid('train_id').notNull().references(() => opticalTrain.id, { onDelete: 'cascade' }),
-  filterName: varchar('filter_name', { length: 64 }),
+  filter: varchar('filter', { length: 64 }), // Spec column name
+  filterName: varchar('filter_name', { length: 64 }), // Legacy column
+  model: jsonb('model').$type<any>().notNull(), // Spec column: JSONB model
+  r2: real('r2').notNull(), // Spec column
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(), // Spec column
+  // Legacy columns
   tempC: real('temp_c'),
-  optimalPos: integer('optimal_pos').notNull(),
-  criticalZone: integer('critical_zone').notNull(),
-  fitType: varchar('fit_type', { length: 32 }).notNull(),
-  coeffsJson: jsonb('coeffs_json').$type<number[]>().notNull(),
-  r2: real('r2').notNull(),
-  sampleCount: integer('sample_count').notNull(),
+  optimalPos: integer('optimal_pos'),
+  criticalZone: integer('critical_zone'),
+  fitType: varchar('fit_type', { length: 32 }),
+  coeffsJson: jsonb('coeffs_json').$type<number[]>(),
+  sampleCount: integer('sample_count'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
-  trainFilterIdx: index('calib_focus_prof_train_filter_idx').on(table.trainId, table.filterName),
+  trainFilterIdx: index('calib_focus_prof_train_filter_idx').on(table.trainId, table.filter),
 }));
 
 // Backfocus offsets per filter

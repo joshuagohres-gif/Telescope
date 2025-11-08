@@ -22,6 +22,7 @@ import {
   type Filter,
   type Sensor,
 } from "../shared/calib-schema";
+import { findBestMasterFrame } from "../lib/calib/scoreMaster";
 
 // ===== CALIBRATION STORAGE =====
 
@@ -56,7 +57,9 @@ export class CalibStorage {
   async getMasterFrames(filters: {
     trainId?: string;
     frameType?: 'bias' | 'dark' | 'flat' | 'darkflat';
+    kind?: 'bias' | 'dark' | 'flat' | 'darkflat';
     filterName?: string;
+    filter?: string;
     binning?: string;
     limit?: number;
   }): Promise<(MasterFrame & { tags?: any[] })[]> {
@@ -65,10 +68,14 @@ export class CalibStorage {
     if (filters.trainId) {
       conditions.push(eq(masterFrame.trainId, filters.trainId));
     }
-    if (filters.frameType) {
+    if (filters.kind) {
+      conditions.push(eq(masterFrame.kind, filters.kind));
+    } else if (filters.frameType) {
       conditions.push(eq(masterFrame.frameType, filters.frameType));
     }
-    if (filters.filterName) {
+    if (filters.filter) {
+      conditions.push(eq(masterFrame.filter, filters.filter));
+    } else if (filters.filterName) {
       conditions.push(eq(masterFrame.filterName, filters.filterName));
     }
     if (filters.binning) {
@@ -97,6 +104,42 @@ export class CalibStorage {
     );
 
     return enriched;
+  }
+
+  async findBestMasterFrame(filters: {
+    trainId: string;
+    kind: 'bias' | 'dark' | 'flat' | 'darkflat';
+    filter?: string;
+    tempC?: number;
+    gain?: string;
+    expS?: number;
+  }): Promise<{ frame: MasterFrame; score_breakdown: any } | null> {
+    // Get all matching frames
+    const conditions = [
+      eq(masterFrame.trainId, filters.trainId),
+      eq(masterFrame.kind, filters.kind),
+    ];
+
+    if (filters.filter) {
+      conditions.push(eq(masterFrame.filter, filters.filter));
+    }
+
+    const frames = await this.db
+      .select()
+      .from(masterFrame)
+      .where(and(...conditions))
+      .limit(100);
+
+    if (frames.length === 0) {
+      return null;
+    }
+
+    // Score and find best match
+    return findBestMasterFrame(frames, {
+      sensor_temp_c: filters.tempC,
+      gain: filters.gain,
+      exposure_s: filters.expS,
+    });
   }
 
   // ===== FOCUS DATA =====
@@ -165,38 +208,79 @@ export class CalibStorage {
       .orderBy(backfocusOffset.filterName);
   }
 
-  async estimateFocus(trainId: string, filterName: string, tempC: number): Promise<{ estimatedPos: number; confidence: string } | null> {
+  async estimateFocus(trainId: string, filterName: string, tempC: number): Promise<{ position: number; confidence: string; r2: number } | null> {
     // Get latest focus profile for this train/filter
     const profiles = await this.db
       .select()
       .from(focusProfile)
       .where(and(
         eq(focusProfile.trainId, trainId),
-        eq(focusProfile.filterName, filterName)
+        eq(focusProfile.filter, filterName)
       ))
-      .orderBy(desc(focusProfile.createdAt))
+      .orderBy(desc(focusProfile.updatedAt))
       .limit(1);
 
-    if (profiles.length === 0) return null;
+    if (profiles.length === 0) {
+      // Try legacy filterName column
+      const legacyProfiles = await this.db
+        .select()
+        .from(focusProfile)
+        .where(and(
+          eq(focusProfile.trainId, trainId),
+          eq(focusProfile.filterName, filterName)
+        ))
+        .orderBy(desc(focusProfile.createdAt))
+        .limit(1);
+      
+      if (legacyProfiles.length === 0) return null;
+      
+      return this.estimateFromProfile(legacyProfiles[0], tempC);
+    }
 
-    const profile = profiles[0];
+    return this.estimateFromProfile(profiles[0], tempC);
+  }
+
+  private estimateFromProfile(profile: any, tempC: number): { position: number; confidence: string; r2: number } {
+    const model = profile.model || (profile.coeffsJson ? { type: 'vcurve', coeffs: profile.coeffsJson } : null);
     
-    // Simple linear temperature compensation
-    // Assume 1 tick per degree C (typical for most focusers)
+    if (!model) {
+      // Fallback to legacy optimalPos
+      const optimalPos = profile.optimalPos || 15000;
+      const tempDelta = tempC - (profile.tempC || 15.0);
+      const tempCompensation = Math.round(tempDelta * 1.0);
+      return {
+        position: optimalPos + tempCompensation,
+        confidence: 'low',
+        r2: profile.r2 || 0,
+      };
+    }
+
+    // Extract optimal position from model
+    let optimalPos: number;
+    if (model.type === 'vcurve' && model.b !== undefined) {
+      optimalPos = model.b;
+    } else if (model.coeffs && Array.isArray(model.coeffs) && model.coeffs.length >= 2) {
+      // Legacy format: coeffs[0] = optimal position
+      optimalPos = model.coeffs[0];
+    } else {
+      optimalPos = profile.optimalPos || 15000;
+    }
+
+    // Temperature compensation (1 tick per degree C)
     const tempDelta = tempC - (profile.tempC || 15.0);
     const tempCompensation = Math.round(tempDelta * 1.0);
-    
-    const estimatedPos = profile.optimalPos + tempCompensation;
-    
-    // Confidence based on R² and sample count
+    const position = Math.round(optimalPos + tempCompensation);
+
+    // Confidence based on R²
+    const r2 = profile.r2 || 0;
     let confidence = 'low';
-    if (profile.r2 > 0.95 && profile.sampleCount >= 7) {
+    if (r2 > 0.95) {
       confidence = 'high';
-    } else if (profile.r2 > 0.85 && profile.sampleCount >= 5) {
+    } else if (r2 > 0.85) {
       confidence = 'medium';
     }
 
-    return { estimatedPos, confidence };
+    return { position, confidence, r2 };
   }
 
   // ===== POINTING MODELS =====

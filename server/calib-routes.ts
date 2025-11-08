@@ -53,11 +53,32 @@ export function registerCalibRoutes(app: Express) {
 
   app.get("/astrodb/v1/calib/masters", async (req, res) => {
     try {
-      const { train_id, frame_type, filter_name, binning, limit } = req.query;
+      const { train_id, kind, frame_type, filter, filter_name, temp_c, gain, exp_s, binning, limit } = req.query;
 
+      // If scoring parameters provided, find best match
+      if (train_id && kind && (temp_c || gain || exp_s)) {
+        const result = await calibStorage.findBestMasterFrame({
+          trainId: String(train_id),
+          kind: String(kind) as any,
+          filter: filter ? String(filter) : filter_name ? String(filter_name) : undefined,
+          tempC: temp_c ? parseFloat(String(temp_c)) : undefined,
+          gain: gain ? String(gain) : undefined,
+          expS: exp_s ? parseFloat(String(exp_s)) : undefined,
+        });
+
+        if (!result) {
+          return res.status(404).json({ error: "No matching master frame found" });
+        }
+
+        return res.json(wrapResponse(result));
+      }
+
+      // Otherwise, return list of frames
       const filters: any = {};
       if (train_id) filters.trainId = String(train_id);
+      if (kind) filters.kind = String(kind);
       if (frame_type) filters.frameType = String(frame_type);
+      if (filter) filters.filter = String(filter);
       if (filter_name) filters.filterName = String(filter_name);
       if (binning) filters.binning = String(binning);
       if (limit) filters.limit = parseInt(String(limit));
@@ -106,15 +127,44 @@ export function registerCalibRoutes(app: Express) {
 
   app.get("/astrodb/v1/calib/focus/estimate/:train_id", async (req, res) => {
     try {
-      const { filter_name, temp_c } = req.query;
+      const { filter_name, filter, temp_c } = req.query;
 
-      if (!filter_name || !temp_c) {
-        return res.status(400).json({ error: "Required: filter_name, temp_c" });
+      const filterName = filter ? String(filter) : filter_name ? String(filter_name) : null;
+      const tempC = temp_c ? parseFloat(String(temp_c)) : null;
+
+      if (!filterName || tempC === null) {
+        return res.status(400).json({ error: "Required: filter (or filter_name), temp_c" });
       }
 
       const estimate = await calibStorage.estimateFocus(
         req.params.train_id,
-        String(filter_name),
+        filterName,
+        tempC
+      );
+
+      if (!estimate) {
+        return res.status(404).json({ error: "No focus profile found for this train/filter" });
+      }
+
+      res.json(wrapResponse(estimate));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== EQUIPMENT FOCUS ESTIMATE (Alternative endpoint) =====
+
+  app.get("/astrodb/v1/equip/focus/estimate", async (req, res) => {
+    try {
+      const { train_id, filter, temp_c } = req.query;
+
+      if (!train_id || !filter || !temp_c) {
+        return res.status(400).json({ error: "Required: train_id, filter, temp_c" });
+      }
+
+      const estimate = await calibStorage.estimateFocus(
+        String(train_id),
+        String(filter),
         parseFloat(String(temp_c))
       );
 
