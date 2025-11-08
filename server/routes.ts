@@ -12,6 +12,7 @@ import {
 } from "./services/ascom-client";
 import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
 import { imagingSequenceExecutor } from "./services/imaging-sequence";
+import { registerAstroDbRoutes } from "./astrodb-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -186,6 +187,9 @@ function stopStatusBroadcast() {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Register AstroDB routes (feature-flagged)
+  registerAstroDbRoutes(app);
 
   // WebSocket server (on distinct path to not conflict with Vite HMR)
   // Reference: javascript_websocket blueprint
