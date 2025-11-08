@@ -14,10 +14,12 @@ import { CommandHistory } from "@/components/telescope/command-history";
 import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
 import { DeviceDiscovery } from "@/components/telescope/device-discovery";
-import { Telescope, Target, Camera, Focus, Settings, Film } from "lucide-react";
+import { Telescope, Target, Camera, Focus, Settings, Film, Star, Satellite, Moon } from "lucide-react";
+import { TonightsTargets, IssPassTracker, LunarAtlas } from "@/targets";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("position");
+  const [targetsTab, setTargetsTab] = useState("tonight");
 
   return (
     <div className="min-h-screen bg-background">
@@ -106,6 +108,41 @@ export default function Dashboard() {
           <div className="lg:col-span-3">
             <StatusDashboard />
           </div>
+        </div>
+
+        {/* Targets Pack Section */}
+        <div className="mt-6">
+          <Card className="p-6">
+            <Tabs value={targetsTab} onValueChange={setTargetsTab}>
+              <TabsList className="grid grid-cols-3 w-full mb-6">
+                <TabsTrigger value="tonight" className="gap-2">
+                  <Star className="w-4 h-4" />
+                  <span className="hidden sm:inline">Tonight's Targets</span>
+                  <span className="sm:hidden">Tonight</span>
+                </TabsTrigger>
+                <TabsTrigger value="iss" className="gap-2">
+                  <Satellite className="w-4 h-4" />
+                  <span className="hidden sm:inline">ISS Tracker</span>
+                  <span className="sm:hidden">ISS</span>
+                </TabsTrigger>
+                <TabsTrigger value="lunar" className="gap-2">
+                  <Moon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Lunar Atlas</span>
+                  <span className="sm:hidden">Lunar</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="tonight" className="mt-0">
+                <TonightsTargets />
+              </TabsContent>
+              <TabsContent value="iss" className="mt-0">
+                <IssPassTracker />
+              </TabsContent>
+              <TabsContent value="lunar" className="mt-0">
+                <LunarAtlas />
+              </TabsContent>
+            </Tabs>
+          </Card>
         </div>
       </div>
     </div>
