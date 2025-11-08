@@ -6,6 +6,7 @@
 import { SceneHost } from './renderer/SceneHost';
 import { SkyDome } from './renderer/SkyDome';
 import { StarLayer } from './renderer/StarLayer';
+import { PlanetLayer } from './renderer/PlanetLayer';
 
 export interface StarBackdropConfig {
   /**
@@ -101,6 +102,7 @@ export class StarBackdrop {
   private sceneHost: SceneHost;
   private skyDome: SkyDome;
   private starLayer: StarLayer;
+  private planetLayer: PlanetLayer;
 
   private config: Required<Omit<StarBackdropConfig, 'container' | 'width' | 'height'>>;
   private autoUpdateInterval: number | null = null;
@@ -134,6 +136,7 @@ export class StarBackdrop {
       time: config.time ?? new Date(),
       antialias: config.antialias ?? true,
       starScale: config.starScale ?? 2.0,
+      planetScale: config.planetScale ?? 1.0,
       applyRefraction: config.applyRefraction ?? true,
       autoUpdateTime: config.autoUpdateTime ?? false,
       initialYaw: config.initialYaw ?? 0,
@@ -178,10 +181,18 @@ export class StarBackdrop {
       pointScale: this.config.starScale,
       applyRefraction: this.config.applyRefraction,
     });
+    this.planetLayer = new PlanetLayer(gl, {
+      latitude: this.config.latitude,
+      longitude: this.config.longitude,
+      time: this.config.time,
+      planetScale: this.config.planetScale,
+      applyRefraction: this.config.applyRefraction,
+    });
 
-    // Add layers to scene (order matters: sky first, then stars)
+    // Add layers to scene (order matters: sky first, stars, then planets on top)
     this.sceneHost.addLayer(this.skyDome);
     this.sceneHost.addLayer(this.starLayer);
+    this.sceneHost.addLayer(this.planetLayer);
 
     // Set initial camera orientation
     this.sceneHost.setCameraOrientation(
@@ -205,6 +216,7 @@ export class StarBackdrop {
     this.config.latitude = latitude;
     this.config.longitude = longitude;
     this.starLayer.updateObserver(latitude, longitude, this.config.time);
+    this.planetLayer.updateObserver(latitude, longitude, this.config.time);
   }
 
   /**
@@ -213,6 +225,11 @@ export class StarBackdrop {
   setTime(time: Date): void {
     this.config.time = time;
     this.starLayer.updateObserver(
+      this.config.latitude,
+      this.config.longitude,
+      time
+    );
+    this.planetLayer.updateObserver(
       this.config.latitude,
       this.config.longitude,
       time
