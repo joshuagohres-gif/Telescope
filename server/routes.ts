@@ -12,12 +12,15 @@ import {
 } from "./services/ascom-client";
 import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
 import { imagingSequenceExecutor } from "./services/imaging-sequence";
+import express from "express";
 import { registerAstroDbRoutes } from "./astrodb-routes";
 import { registerDesignRoutes } from "./design-routes";
-import { registerOpsRoutes } from "./ops-routes";
-import { registerCalibRoutes } from "./calib-routes";
-import { registerTargetsRoutes } from "./targets-routes";
-import { registerPlanQaRoutes } from "./planqa-routes";
+import { createOpsRouter } from "./ops-routes";
+import { createCalibRouter } from "./calib-routes";
+import { createTargetsRouter } from "./targets-routes";
+import { createPlanqaRouter } from "./planqa-routes";
+import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled } from "./astrodb-api/config/flags";
+import { registerDocsRoute } from "./astrodb-api/docs";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -199,17 +202,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register Design KB routes (feature-flagged)
   registerDesignRoutes(app);
   
-  // Register Operations & Environment routes (feature-flagged)
-  registerOpsRoutes(app);
+  // Conditionally mount pack routers based on feature flags
+  const astrodbRouter = express.Router();
   
-  // Register Calibration routes (feature-flagged)
-  registerCalibRoutes(app);
+  if (isOpsEnabled()) {
+    const opsRouter = createOpsRouter();
+    astrodbRouter.use(opsRouter);
+  }
   
-  // Register Targets & Alerts routes (feature-flagged)
-  registerTargetsRoutes(app);
+  if (isTargetsEnabled()) {
+    const targetsRouter = createTargetsRouter();
+    astrodbRouter.use(targetsRouter);
+  }
   
-  // Register Planning, QA & Personalization routes (feature-flagged)
-  registerPlanQaRoutes(app);
+  if (isCalibEnabled()) {
+    const calibRouter = createCalibRouter();
+    astrodbRouter.use(calibRouter);
+  }
+  
+  if (isPlanqaEnabled()) {
+    const planqaRouter = createPlanqaRouter();
+    astrodbRouter.use(planqaRouter);
+  }
+  
+  // Mount combined router
+  app.use("/astrodb/v1", astrodbRouter);
+  
+  // Register docs endpoint (always available, shows enabled packs)
+  registerDocsRoute(app);
+  
+  // Serve docs HTML page (use express.static in production, or serve directly)
+  app.get("/astrodb/docs.html", (req, res) => {
+    const fs = require("fs");
+    const path = require("path");
+    const filePath = path.join(process.cwd(), "client/public/astrodb/docs.html");
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("Documentation page not found");
+    }
+  });
 
   // WebSocket server (on distinct path to not conflict with Vite HMR)
   // Reference: javascript_websocket blueprint

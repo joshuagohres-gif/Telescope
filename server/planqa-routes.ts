@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { planQaStorage } from "./planqa-storage";
 
 // Feature flag middleware
@@ -22,14 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerPlanQaRoutes(app: Express) {
-  app.use("/astrodb/v1/planqa", checkPlanQaFeatureFlag);
-  app.use("/astrodb/v1/plan", checkPlanQaFeatureFlag);
-  app.use("/astrodb/v1/qa", checkPlanQaFeatureFlag);
+export function createPlanqaRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkPlanQaFeatureFlag);
 
   // ===== RECIPES =====
 
-  app.get("/astrodb/v1/planqa/recipes", async (req, res) => {
+  router.get("/planqa/recipes", async (req, res) => {
     try {
       const { target_type, target_class, filter_name, filter, name, limit } = req.query;
 
@@ -50,7 +52,7 @@ export function registerPlanQaRoutes(app: Express) {
 
   // ===== SMART RECIPE (Rule-based) =====
 
-  app.get("/astrodb/v1/plan/recipe", async (req, res) => {
+  router.get("/plan/recipe", async (req, res) => {
     try {
       const { target_class, sky, filter, train_id } = req.query;
 
@@ -84,7 +86,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/recipes/:id", async (req, res) => {
+  router.get("/planqa/recipes/:id", async (req, res) => {
     try {
       const recipe = await planQaStorage.getRecipeById(parseInt(req.params.id));
       if (!recipe) {
@@ -98,7 +100,7 @@ export function registerPlanQaRoutes(app: Express) {
 
   // ===== SNR ESTIMATION =====
 
-  app.get("/astrodb/v1/planqa/snr/estimate", async (req, res) => {
+  router.get("/planqa/snr/estimate", async (req, res) => {
     try {
       const { train_id, filter_name, target_type, exposure_sec, sky_mpsas } = req.query;
 
@@ -128,7 +130,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/snr/models", async (req, res) => {
+  router.get("/planqa/snr/models", async (req, res) => {
     try {
       const { train_id, filter_name, target_type } = req.query;
 
@@ -146,7 +148,7 @@ export function registerPlanQaRoutes(app: Express) {
 
   // ===== SESSIONS =====
 
-  app.get("/astrodb/v1/planqa/sessions", async (req, res) => {
+  router.get("/planqa/sessions", async (req, res) => {
     try {
       const { train_id, site_id, from, to, limit } = req.query;
 
@@ -164,7 +166,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/sessions/:id", async (req, res) => {
+  router.get("/planqa/sessions/:id", async (req, res) => {
     try {
       const session = await planQaStorage.getSessionById(req.params.id);
       if (!session) {
@@ -176,7 +178,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/sessions/:id/metrics", async (req, res) => {
+  router.get("/planqa/sessions/:id/metrics", async (req, res) => {
     try {
       const metrics = await planQaStorage.getSessionMetrics(req.params.id);
       res.json(wrapResponse(metrics));
@@ -185,7 +187,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/sessions/:id/qa", async (req, res) => {
+  router.get("/planqa/sessions/:id/qa", async (req, res) => {
     try {
       const summary = await planQaStorage.getSessionQaSummary(req.params.id);
       if (!summary) {
@@ -199,7 +201,7 @@ export function registerPlanQaRoutes(app: Express) {
 
   // ===== QA SUMMARY =====
 
-  app.get("/astrodb/v1/qa/summary", async (req, res) => {
+  router.get("/qa/summary", async (req, res) => {
     try {
       const { session_id } = req.query;
 
@@ -220,7 +222,7 @@ export function registerPlanQaRoutes(app: Express) {
 
   // ===== USER PROFILES =====
 
-  app.get("/astrodb/v1/planqa/profiles/:user_id/sites", async (req, res) => {
+  router.get("/planqa/profiles/:user_id/sites", async (req, res) => {
     try {
       const profiles = await planQaStorage.getSiteProfiles(req.params.user_id);
       res.json(wrapResponse(profiles));
@@ -229,7 +231,7 @@ export function registerPlanQaRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/planqa/profiles/:user_id/settings", async (req, res) => {
+  router.get("/planqa/profiles/:user_id/settings", async (req, res) => {
     try {
       const settings = await planQaStorage.getUserSettings(req.params.user_id);
       if (!settings) {
@@ -240,4 +242,12 @@ export function registerPlanQaRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerPlanQaRoutes(app: Express) {
+  const router = createPlanqaRouter();
+  app.use("/astrodb/v1", router);
 }

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { calibStorage } from "./calib-storage";
 
 // Feature flag middleware
@@ -22,12 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerCalibRoutes(app: Express) {
-  app.use("/astrodb/v1/calib", checkCalibFeatureFlag);
+export function createCalibRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkCalibFeatureFlag);
 
   // ===== OPTICAL TRAINS =====
 
-  app.get("/astrodb/v1/calib/trains", async (req, res) => {
+  router.get("/calib/trains", async (req, res) => {
     try {
       const { name } = req.query;
       const trains = await calibStorage.getOpticalTrains({ name: name ? String(name) : undefined });
@@ -37,7 +41,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/trains/:id", async (req, res) => {
+  router.get("/calib/trains/:id", async (req, res) => {
     try {
       const train = await calibStorage.getOpticalTrainById(req.params.id);
       if (!train) {
@@ -51,7 +55,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== MASTER FRAMES =====
 
-  app.get("/astrodb/v1/calib/masters", async (req, res) => {
+  router.get("/calib/masters", async (req, res) => {
     try {
       const { train_id, kind, frame_type, filter, filter_name, temp_c, gain, exp_s, binning, limit } = req.query;
 
@@ -92,7 +96,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== FOCUS =====
 
-  app.get("/astrodb/v1/calib/focus/samples", async (req, res) => {
+  router.get("/calib/focus/samples", async (req, res) => {
     try {
       const { train_id, session_id, from, to, limit } = req.query;
 
@@ -110,7 +114,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/focus/profiles", async (req, res) => {
+  router.get("/calib/focus/profiles", async (req, res) => {
     try {
       const { train_id, filter_name } = req.query;
 
@@ -125,7 +129,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/focus/estimate/:train_id", async (req, res) => {
+  router.get("/calib/focus/estimate/:train_id", async (req, res) => {
     try {
       const { filter_name, filter, temp_c } = req.query;
 
@@ -154,7 +158,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== EQUIPMENT FOCUS ESTIMATE (Alternative endpoint) =====
 
-  app.get("/astrodb/v1/equip/focus/estimate", async (req, res) => {
+  router.get("/equip/focus/estimate", async (req, res) => {
     try {
       const { train_id, filter, temp_c } = req.query;
 
@@ -178,7 +182,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/backfocus/:train_id", async (req, res) => {
+  router.get("/calib/backfocus/:train_id", async (req, res) => {
     try {
       const offsets = await calibStorage.getBackfocusOffsets(req.params.train_id);
       res.json(wrapResponse(offsets));
@@ -189,7 +193,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== POINTING =====
 
-  app.get("/astrodb/v1/calib/pointing", async (req, res) => {
+  router.get("/calib/pointing", async (req, res) => {
     try {
       const { train_id } = req.query;
       const models = await calibStorage.getPointingModels(train_id ? String(train_id) : undefined);
@@ -201,7 +205,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== PEC =====
 
-  app.get("/astrodb/v1/calib/pec", async (req, res) => {
+  router.get("/calib/pec", async (req, res) => {
     try {
       const { mount_model, axis } = req.query;
 
@@ -218,7 +222,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== FILTERS =====
 
-  app.get("/astrodb/v1/calib/filters", async (req, res) => {
+  router.get("/calib/filters", async (req, res) => {
     try {
       const { name } = req.query;
       const filters = await calibStorage.getFilters(name ? String(name) : undefined);
@@ -228,7 +232,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/filters/:id/curve", async (req, res) => {
+  router.get("/calib/filters/:id/curve", async (req, res) => {
     try {
       const result = await calibStorage.getFilterWithCurve(parseInt(req.params.id));
       if (!result) {
@@ -242,7 +246,7 @@ export function registerCalibRoutes(app: Express) {
 
   // ===== SENSORS =====
 
-  app.get("/astrodb/v1/calib/sensors", async (req, res) => {
+  router.get("/calib/sensors", async (req, res) => {
     try {
       const { model } = req.query;
       const sensors = await calibStorage.getSensors(model ? String(model) : undefined);
@@ -252,7 +256,7 @@ export function registerCalibRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/calib/sensors/:id/qe", async (req, res) => {
+  router.get("/calib/sensors/:id/qe", async (req, res) => {
     try {
       const result = await calibStorage.getSensorWithQe(parseInt(req.params.id));
       if (!result) {
@@ -263,4 +267,12 @@ export function registerCalibRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerCalibRoutes(app: Express) {
+  const router = createCalibRouter();
+  app.use("/astrodb/v1", router);
 }

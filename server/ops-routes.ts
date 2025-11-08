@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { opsStorage } from "./ops-storage";
 
 // Feature flag middleware
@@ -22,14 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerOpsRoutes(app: Express) {
-  // Apply feature flag to all ops and user routes
-  app.use("/astrodb/v1/ops", checkOpsFeatureFlag);
-  app.use("/astrodb/v1/user", checkOpsFeatureFlag);
+export function createOpsRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkOpsFeatureFlag);
 
   // ===== SITES =====
 
-  app.get("/astrodb/v1/ops/sites", async (req, res) => {
+  router.get("/ops/sites", async (req, res) => {
     try {
       const { name, lat, lon, radius_km } = req.query;
 
@@ -50,7 +52,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/sites/:id", async (req, res) => {
+  router.get("/ops/sites/:id", async (req, res) => {
     try {
       const site = await opsStorage.getSiteById(req.params.id);
       if (!site) {
@@ -64,7 +66,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== WEATHER/METEO =====
 
-  app.get("/astrodb/v1/ops/weather/:site_id", async (req, res) => {
+  router.get("/ops/weather/:site_id", async (req, res) => {
     try {
       const { from, to, max_cloud, min_transparency, max_seeing } = req.query;
 
@@ -84,7 +86,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== HORIZON =====
 
-  app.get("/astrodb/v1/ops/horizon", async (req, res) => {
+  router.get("/ops/horizon", async (req, res) => {
     try {
       const siteId = req.query.site_id as string;
       if (!siteId) {
@@ -101,7 +103,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== OBSTACLES =====
 
-  app.get("/astrodb/v1/ops/obstacles/:site_id", async (req, res) => {
+  router.get("/ops/obstacles/:site_id", async (req, res) => {
     try {
       const obstacles = await opsStorage.getObstacles(req.params.site_id);
       res.json(wrapResponse(obstacles));
@@ -112,7 +114,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== DEW RISK =====
 
-  app.get("/astrodb/v1/ops/dew/risk", async (req, res) => {
+  router.get("/ops/dew/risk", async (req, res) => {
     try {
       const siteId = req.query.site_id as string;
       const tsStr = req.query.ts as string;
@@ -133,7 +135,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/dew/profiles", async (req, res) => {
+  router.get("/ops/dew/profiles", async (req, res) => {
     try {
       const { device_key } = req.query;
       const profiles = await opsStorage.getDewProfiles(device_key ? String(device_key) : undefined);
@@ -143,7 +145,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/dew/hints", async (req, res) => {
+  router.get("/ops/dew/hints", async (req, res) => {
     try {
       const { train_id } = req.query;
       const hints = await opsStorage.getDewControlHints(train_id ? String(train_id) : undefined);
@@ -155,7 +157,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== LIGHT POLLUTION =====
 
-  app.get("/astrodb/v1/ops/lightpollution/tiles", async (req, res) => {
+  router.get("/ops/lightpollution/tiles", async (req, res) => {
     try {
       const { z, x_min, x_max, y_min, y_max, dataset } = req.query;
 
@@ -181,7 +183,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/lightpollution/site/:site_id", async (req, res) => {
+  router.get("/ops/lightpollution/site/:site_id", async (req, res) => {
     try {
       const lpData = await opsStorage.getSiteLp(req.params.site_id);
       if (!lpData) {
@@ -195,7 +197,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== LIGHT POLLUTION LOOKUP =====
 
-  app.get("/astrodb/v1/ops/lightpollution", async (req, res) => {
+  router.get("/ops/lightpollution", async (req, res) => {
     try {
       const latStr = req.query.lat as string;
       const lonStr = req.query.lon as string;
@@ -224,7 +226,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== USER SITES =====
 
-  app.get("/astrodb/v1/user/sites", async (req, res) => {
+  router.get("/user/sites", async (req, res) => {
     try {
       const sites = await opsStorage.getUserSites();
       res.json(wrapResponse(sites));
@@ -232,4 +234,12 @@ export function registerOpsRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerOpsRoutes(app: Express) {
+  const router = createOpsRouter();
+  app.use("/astrodb/v1", router);
 }

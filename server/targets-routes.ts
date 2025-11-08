@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { targetsStorage } from "./targets-storage";
 
 // Feature flag middleware
@@ -22,12 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerTargetsRoutes(app: Express) {
-  app.use("/astrodb/v1/targets", checkTargetsFeatureFlag);
+export function createTargetsRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkTargetsFeatureFlag);
 
   // ===== TRANSIENTS =====
 
-  app.get("/astrodb/v1/targets/transients", async (req, res) => {
+  router.get("/targets/transients", async (req, res) => {
     try {
       const { type, name, min_mag, max_mag, since, limit } = req.query;
 
@@ -46,7 +50,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/transients/:id", async (req, res) => {
+  router.get("/targets/transients/:id", async (req, res) => {
     try {
       const transient = await targetsStorage.getTransientById(parseInt(req.params.id));
       if (!transient) {
@@ -60,7 +64,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== NOTICES =====
 
-  app.get("/astrodb/v1/targets/notices", async (req, res) => {
+  router.get("/targets/notices", async (req, res) => {
     try {
       const { transient_id, source, since, limit } = req.query;
 
@@ -79,7 +83,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== MINOR PLANETS =====
 
-  app.get("/astrodb/v1/targets/minorplanets", async (req, res) => {
+  router.get("/targets/minorplanets", async (req, res) => {
     try {
       const { designation, name, body_type, limit } = req.query;
 
@@ -96,7 +100,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id", async (req, res) => {
+  router.get("/targets/minorplanets/:id", async (req, res) => {
     try {
       const body = await targetsStorage.getMpBodyById(parseInt(req.params.id));
       if (!body) {
@@ -108,7 +112,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id/ephemeris", async (req, res) => {
+  router.get("/targets/minorplanets/:id/ephemeris", async (req, res) => {
     try {
       const { from, to } = req.query;
 
@@ -125,7 +129,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id/orbit", async (req, res) => {
+  router.get("/targets/minorplanets/:id/orbit", async (req, res) => {
     try {
       const elements = await targetsStorage.getOrbitElements(parseInt(req.params.id));
       res.json(wrapResponse(elements));
@@ -136,7 +140,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== FEATURES =====
 
-  app.get("/astrodb/v1/targets/features", async (req, res) => {
+  router.get("/targets/features", async (req, res) => {
     try {
       const { body, feature_type, name, limit, near, radius_km } = req.query;
 
@@ -176,7 +180,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== STAR HOPS =====
 
-  app.get("/astrodb/v1/targets/hops/:target_name", async (req, res) => {
+  router.get("/targets/hops/:target_name", async (req, res) => {
     try {
       const hops = await targetsStorage.getStarHops(req.params.target_name);
       if (hops.length === 0) {
@@ -188,7 +192,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/hops", async (req, res) => {
+  router.get("/targets/hops", async (req, res) => {
     try {
       const { q, limit } = req.query;
       if (!q) {
@@ -207,7 +211,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== TONIGHT'S SHOWPIECES =====
 
-  app.get("/astrodb/v1/targets/tonight", async (req, res) => {
+  router.get("/targets/tonight", async (req, res) => {
     try {
       const latStr = req.query.lat as string;
       const lonStr = req.query.lon as string;
@@ -257,7 +261,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== SATELLITE PASSES =====
 
-  app.get("/astrodb/v1/targets/passes", async (req, res) => {
+  router.get("/targets/passes", async (req, res) => {
     try {
       const noradIdStr = req.query.norad_id as string;
       const latStr = req.query.lat as string;
@@ -303,4 +307,12 @@ export function registerTargetsRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerTargetsRoutes(app: Express) {
+  const router = createTargetsRouter();
+  app.use("/astrodb/v1", router);
 }
