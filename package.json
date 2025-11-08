@@ -8,7 +8,14 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "astrodb:seed": "tsx server/astrodb-seed.ts",
+    "design:seed": "tsx server/design-seed.ts",
+    "ops:seed": "tsx server/ops-seed.ts",
+    "calib:seed": "tsx server/calib-seed.ts",
+    "targets:seed": "tsx server/targets-seed.ts",
+    "planqa:seed": "tsx server/planqa-seed.ts",
+    "seed:all": "npm run astrodb:seed && npm run design:seed && npm run ops:seed && npm run calib:seed && npm run targets:seed && npm run planqa:seed"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

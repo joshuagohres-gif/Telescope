@@ -1,0 +1,13 @@
+node_modules
+.git
+.github
+.env
+.env.local
+*.log
+dist
+data
+migrations
+worker/venv
+worker/__pycache__
+*.pyc
+.DS_Store

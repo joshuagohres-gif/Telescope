@@ -4,11 +4,66 @@ A modern web-based telescope control system with ASCOM Alpaca support and real-t
 
 ## Features
 
+### Core Telescope Control
+
 - ASCOM Alpaca telescope, camera, and focuser control
 - Real-time 3D star backdrop with 250 stars from the Yale Bright Star Catalog
 - Time-optimal slewing animation with horizon safety constraints
 - WebGL2-based sky visualization with accurate celestial coordinates
 - Responsive React UI with live telescope status
+
+### Astronomical Knowledge Base (AstroDB)
+
+Four comprehensive read-only APIs providing access to:
+
+- **Equipment Database**: 2,000+ astronomy devices (mounts, cameras, focusers) with detailed specs
+- **Catalog**: Top 500 night-sky objects (galaxies, nebulae, clusters) with coordinates
+- **Satellites**: ~50 brightest man-made objects with TLE data and pass predictions
+- **Events**: 2025-2026 major astronomical events with visibility information
+
+See [README-astrodb.md](./README-astrodb.md) for complete documentation.
+
+### Telescope Design Knowledge Base
+
+**NEW**: Comprehensive design methodology database for 3D-printable telescopes:
+
+- **40+ Concepts**: Design patterns across optics, mechanics, testing, safety
+- **25+ Equations**: Verified formulas with unit tests (secondary sizing, focal ratios, etc.)
+- **18+ Dimensioned Examples**: Complete telescope designs (80-200mm apertures) with BoMs
+- **Safety Procedures**: Critical protocols for solar observing and laser collimation
+- **Training Export**: NDJSON format for generative design systems
+
+See [README-design-kb.md](./README-design-kb.md) for complete documentation.
+
+### Extended AstroDB: Operations, Calibration, Targeting & Planning
+
+**NEW**: Four advanced knowledge backends for professional observatory operations:
+
+1. **Operations & Environment** (`/astrodb/v1/ops/*`)
+   - Weather/seeing forecasts (7Timer integration)
+   - Horizon profiles & obstacle mapping
+   - Dew risk calculation & heater control hints
+   - Light pollution tiles (World Atlas 2015)
+
+2. **Equipment & Calibration** (`/astrodb/v1/calib/*`)
+   - Master calibration frame library
+   - Autofocus curves with temperature compensation
+   - Pointing models & PEC profiles
+   - Filter transmission & sensor QE curves
+
+3. **Targeting & Alerts** (`/astrodb/v1/targets/*`)
+   - Transient alerts (TNS, GCN: supernovae, novae, GRBs)
+   - Minor planet ephemerides (50+ tracked objects)
+   - Lunar/planetary feature gazetteer (400+ features)
+   - Star-hop waypoints for deep-sky navigation
+
+4. **Planning, QA & Personalization** (`/astrodb/v1/planqa/*`)
+   - Exposure recipe optimizer
+   - SNR estimation models
+   - Session telemetry & quality metrics
+   - User site profiles & preferences
+
+See [README-extended-astrodb.md](./README-extended-astrodb.md) for complete API documentation.
 
 ## Setup
 
@@ -30,9 +85,29 @@ npm install
 # Start the backend server
 npm run dev
 
-# In another terminal, start the frontend
+# In another terminal, start the frontend (if needed)
 cd client && npm run dev
 ```
+
+### AstroDB Setup (Optional)
+
+To enable the astronomical knowledge base APIs:
+
+```bash
+# 1. Set environment variable
+export ASTRO_KB_ENABLED=true
+
+# 2. Run setup script
+./scripts/setup-astrodb.sh
+
+# 3. Start with Docker Compose (recommended)
+docker compose -f docker-compose.astrodb.yml up
+
+# 4. Test the API
+./scripts/demo-astrodb.sh
+```
+
+See [README-astrodb.md](./README-astrodb.md) for detailed setup and API documentation.
 
 ### Production Build
 
@@ -114,26 +189,40 @@ The following directories and patterns are excluded by default:
 
 ```
 telescope/
-├── client/                # React frontend
+├── client/                    # React frontend
 │   └── src/
-│       ├── components/    # UI components
+│       ├── components/        # UI components
 │       ├── simulatedSkyBackdrop/  # WebGL star visualization
-│       └── utils/         # Utilities
-├── server/                # Express backend
-│   ├── index.ts          # Server entry point
-│   └── routes/           # API routes
-├── scripts/              # Utility scripts
-│   ├── loc_report.py    # LOC counting tool
-│   └── fixtures/        # Test fixtures
+│       └── utils/             # Utilities
+├── server/                    # Express backend
+│   ├── index.ts              # Server entry point
+│   ├── routes.ts             # API routes
+│   ├── astrodb-routes.ts     # AstroDB API routes
+│   ├── astrodb-storage.ts    # AstroDB data access
+│   └── services/             # Business logic
+├── worker/                    # Python ETL worker
+│   ├── main.py               # Data scrapers
+│   └── importer.py           # NDJSON importer
+├── shared/                    # Shared TypeScript types
+│   ├── schema.ts             # Main DB schema
+│   └── astrodb-schema.ts     # AstroDB schemas
+├── scripts/                   # Utility scripts
+│   ├── setup-astrodb.sh      # AstroDB setup
+│   ├── demo-astrodb.sh       # API demo
+│   └── loc_report.py         # LOC counting tool
+├── docker-compose.astrodb.yml # Full stack Docker setup
 └── package.json
 ```
 
 ## Technologies
 
 - **Frontend**: React, TypeScript, WebGL2, Vite
-- **Backend**: Express, TypeScript
+- **Backend**: Express, TypeScript, Node.js
+- **Database**: PostgreSQL with Drizzle ORM
+- **ETL Worker**: Python 3.11+ with httpx, APScheduler
 - **Telescope Control**: ASCOM Alpaca REST API
 - **Sky Visualization**: Custom WebGL shaders, astronomical coordinate transformations
+- **Containerization**: Docker & Docker Compose
 
 ## License
 
