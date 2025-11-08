@@ -386,10 +386,21 @@ export class DbStorage implements IStorage {
   }
 }
 
-export const storage = new DbStorage();
+// Use MemStorage if no DATABASE_URL is provided, otherwise use DbStorage
+export let storage: IStorage;
 
 // Initialize storage on module load
 export async function initializeStorage() {
-  await storage.initialize();
-  console.log("Database storage initialized");
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    console.log("No DATABASE_URL found, using in-memory storage");
+    storage = new MemStorage();
+  } else {
+    console.log("Using database storage");
+    storage = new DbStorage();
+    await (storage as DbStorage).initialize();
+  }
+
+  console.log("Storage initialized");
 }
