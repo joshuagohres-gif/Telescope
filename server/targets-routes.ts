@@ -138,8 +138,29 @@ export function registerTargetsRoutes(app: Express) {
 
   app.get("/astrodb/v1/targets/features", async (req, res) => {
     try {
-      const { body, feature_type, name, limit } = req.query;
+      const { body, feature_type, name, limit, near, radius_km } = req.query;
 
+      // Radius search
+      if (near && radius_km) {
+        const nearParts = String(near).split(",");
+        if (nearParts.length !== 2) {
+          return res.status(400).json({ error: "near parameter must be 'lat,lon'" });
+        }
+        const lat = parseFloat(nearParts[0]);
+        const lon = parseFloat(nearParts[1]);
+        const radius = parseFloat(String(radius_km));
+
+        if (isNaN(lat) || isNaN(lon) || isNaN(radius)) {
+          return res.status(400).json({ error: "Invalid lat, lon, or radius_km values" });
+        }
+
+        const bodyFilter = body ? String(body) : "Moon";
+        const features = await targetsStorage.getFeaturesNear(bodyFilter, lat, lon, radius);
+        res.json(wrapResponse(features));
+        return;
+      }
+
+      // Regular filter search
       const filters: any = {};
       if (body) filters.body = String(body);
       if (feature_type) filters.featureType = String(feature_type);
@@ -179,6 +200,105 @@ export function registerTargetsRoutes(app: Express) {
         limit ? parseInt(String(limit)) : 50
       );
       res.json(wrapResponse(results));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== TONIGHT'S SHOWPIECES =====
+
+  app.get("/astrodb/v1/targets/tonight", async (req, res) => {
+    try {
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+      const fromStr = req.query.from as string;
+      const toStr = req.query.to as string;
+      const stepStr = req.query.step as string;
+
+      if (!latStr || !lonStr || !fromStr || !toStr) {
+        return res.status(400).json({
+          error: "Required parameters: lat, lon, from, to",
+        });
+      }
+
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      const from = new Date(fromStr);
+      const to = new Date(toStr);
+
+      if (isNaN(lat) || isNaN(lon) || isNaN(from.getTime()) || isNaN(to.getTime())) {
+        return res.status(400).json({ error: "Invalid parameter values" });
+      }
+
+      // Parse step (e.g., "60m" -> 60 minutes)
+      let stepMinutes = 60;
+      if (stepStr) {
+        const match = stepStr.match(/^(\d+)([mh])$/);
+        if (match) {
+          const value = parseInt(match[1]);
+          const unit = match[2];
+          stepMinutes = unit === "h" ? value * 60 : value;
+        }
+      }
+
+      const showpieces = await targetsStorage.getShowpiecesTonight(
+        lat,
+        lon,
+        from,
+        to,
+        stepMinutes
+      );
+
+      res.json(wrapResponse(showpieces));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== SATELLITE PASSES =====
+
+  app.get("/astrodb/v1/targets/passes", async (req, res) => {
+    try {
+      const noradIdStr = req.query.norad_id as string;
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+      const altMStr = req.query.alt_m as string;
+      const fromStr = req.query.from as string;
+      const toStr = req.query.to as string;
+
+      if (!noradIdStr || !latStr || !lonStr || !fromStr || !toStr) {
+        return res.status(400).json({
+          error: "Required parameters: norad_id, lat, lon, from, to",
+        });
+      }
+
+      const noradId = parseInt(noradIdStr);
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      const altM = altMStr ? parseFloat(altMStr) : 0;
+      const from = new Date(fromStr);
+      const to = new Date(toStr);
+
+      if (
+        isNaN(noradId) ||
+        isNaN(lat) ||
+        isNaN(lon) ||
+        isNaN(from.getTime()) ||
+        isNaN(to.getTime())
+      ) {
+        return res.status(400).json({ error: "Invalid parameter values" });
+      }
+
+      const passes = await targetsStorage.getSatellitePasses(
+        noradId,
+        lat,
+        lon,
+        altM,
+        from,
+        to
+      );
+
+      res.json(wrapResponse(passes));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
