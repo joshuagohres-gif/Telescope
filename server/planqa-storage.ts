@@ -23,16 +23,22 @@ export class PlanQaStorage {
 
   async getRecipes(filters: {
     targetType?: string;
+    targetClass?: string;
     filterName?: string;
+    filter?: string;
     name?: string;
     limit?: number;
   }): Promise<Recipe[]> {
     const conditions = [];
     
-    if (filters.targetType) {
+    if (filters.targetClass) {
+      conditions.push(eq(recipe.targetClass, filters.targetClass));
+    } else if (filters.targetType) {
       conditions.push(eq(recipe.targetType, filters.targetType as any));
     }
-    if (filters.filterName) {
+    if (filters.filter) {
+      conditions.push(eq(recipe.filter, filters.filter));
+    } else if (filters.filterName) {
       conditions.push(eq(recipe.filterName, filters.filterName));
     }
     if (filters.name) {
@@ -48,6 +54,44 @@ export class PlanQaStorage {
       .where(whereClause)
       .orderBy(desc(recipe.createdAt))
       .limit(limit);
+  }
+
+  async findRecipeByRule(filters: {
+    targetClass: string;
+    sky: number; // Sky brightness in mpsas
+    filter: string;
+    trainId?: string;
+  }): Promise<Recipe | null> {
+    // Bin sky brightness (e.g., 20.5 -> "20-21", 21.3 -> "21-22")
+    const skyBin = this.binSkyMpsas(filters.sky);
+    
+    const conditions = [
+      eq(recipe.targetClass, filters.targetClass),
+      eq(recipe.skyMpsasBin, skyBin),
+      eq(recipe.filter, filters.filter),
+    ];
+
+    if (filters.trainId) {
+      conditions.push(eq(recipe.trainId, filters.trainId));
+    }
+
+    const results = await this.db
+      .select()
+      .from(recipe)
+      .where(and(...conditions))
+      .orderBy(desc(recipe.createdAt))
+      .limit(1);
+
+    return results[0] || null;
+  }
+
+  private binSkyMpsas(mpsas: number): string {
+    // Bin sky brightness into ranges: 18-19, 19-20, 20-21, 21-22, 22+
+    if (mpsas < 19) return "18-19";
+    if (mpsas < 20) return "19-20";
+    if (mpsas < 21) return "20-21";
+    if (mpsas < 22) return "21-22";
+    return "22+";
   }
 
   async getRecipeById(id: number): Promise<Recipe | undefined> {
@@ -175,37 +219,114 @@ export class PlanQaStorage {
   }
 
   async getSessionQaSummary(sessionId: string): Promise<{
-    session: Session;
-    metrics: Record<string, { avg: number; min: number; max: number; unit: string }>;
+    frames: number;
+    median_hfr: number;
+    reject_rate: number;
+    guiding_rms: { ra: number; dec: number } | null;
+    notes: string | null;
   } | null> {
     const sess = await this.getSessionById(sessionId);
     if (!sess) return null;
 
-    const metrics = await this.getSessionMetrics(sessionId);
+    // Get submetrics (spec format)
+    const submetrics = await this.db
+      .select()
+      .from(submetric)
+      .where(eq(submetric.sessionId, sessionId))
+      .orderBy(submetric.frameNo);
 
-    // Group by metric name and compute stats
-    const summary: Record<string, { avg: number; min: number; max: number; unit: string }> = {};
-    
-    for (const m of metrics) {
-      if (!summary[m.metricName]) {
-        summary[m.metricName] = {
-          avg: 0,
-          min: m.value,
-          max: m.value,
-          unit: m.unit || '',
+    if (submetrics.length === 0) {
+      // Fallback to legacy metrics format
+      const legacyMetrics = await this.getSessionMetrics(sessionId);
+      if (legacyMetrics.length === 0) {
+        return {
+          frames: 0,
+          median_hfr: 0,
+          reject_rate: 0,
+          guiding_rms: null,
+          notes: sess.notes,
         };
       }
-      summary[m.metricName].min = Math.min(summary[m.metricName].min, m.value);
-      summary[m.metricName].max = Math.max(summary[m.metricName].max, m.value);
+      // Convert legacy format
+      return this.convertLegacyMetrics(sess, legacyMetrics);
     }
 
-    // Calculate averages
-    for (const metricName in summary) {
-      const values = metrics.filter(m => m.metricName === metricName).map(m => m.value);
-      summary[metricName].avg = values.reduce((a, b) => a + b, 0) / values.length;
+    // Calculate stats from submetrics
+    const frames = submetrics.length;
+    const hfrValues = submetrics.map(m => m.hfr).filter(h => h !== null && h !== undefined) as number[];
+    const rejected = submetrics.filter(m => m.reject).length;
+    const rejectRate = frames > 0 ? rejected / frames : 0;
+
+    // Calculate median HFR
+    let medianHfr = 0;
+    if (hfrValues.length > 0) {
+      const sorted = [...hfrValues].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      medianHfr = sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
     }
 
-    return { session: sess, metrics: summary };
+    // Calculate guiding RMS
+    const rmsRaValues = submetrics.map(m => m.rmsRa).filter(r => r !== null && r !== undefined) as number[];
+    const rmsDecValues = submetrics.map(m => m.rmsDec).filter(r => r !== null && r !== undefined) as number[];
+    
+    let guidingRms: { ra: number; dec: number } | null = null;
+    if (rmsRaValues.length > 0 && rmsDecValues.length > 0) {
+      const avgRa = rmsRaValues.reduce((a, b) => a + b, 0) / rmsRaValues.length;
+      const avgDec = rmsDecValues.reduce((a, b) => a + b, 0) / rmsDecValues.length;
+      guidingRms = { ra: avgRa, dec: avgDec };
+    }
+
+    return {
+      frames,
+      median_hfr: medianHfr,
+      reject_rate: rejectRate,
+      guiding_rms: guidingRms,
+      notes: sess.notes,
+    };
+  }
+
+  private convertLegacyMetrics(sess: Session, metrics: any[]): {
+    frames: number;
+    median_hfr: number;
+    reject_rate: number;
+    guiding_rms: { ra: number; dec: number } | null;
+    notes: string | null;
+  } {
+    const frames = metrics.length;
+    const hfrMetrics = metrics.filter(m => m.metricName === 'hfr');
+    const hfrValues = hfrMetrics.map(m => m.value);
+    
+    let medianHfr = 0;
+    if (hfrValues.length > 0) {
+      const sorted = [...hfrValues].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      medianHfr = sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+    }
+
+    const rejectMetrics = metrics.filter(m => m.metricName === 'reject' && m.value > 0);
+    const rejectRate = frames > 0 ? rejectMetrics.length / frames : 0;
+
+    const rmsRaMetrics = metrics.filter(m => m.metricName === 'rms_ra');
+    const rmsDecMetrics = metrics.filter(m => m.metricName === 'rms_dec');
+    
+    let guidingRms: { ra: number; dec: number } | null = null;
+    if (rmsRaMetrics.length > 0 && rmsDecMetrics.length > 0) {
+      const avgRa = rmsRaMetrics.reduce((sum, m) => sum + m.value, 0) / rmsRaMetrics.length;
+      const avgDec = rmsDecMetrics.reduce((sum, m) => sum + m.value, 0) / rmsDecMetrics.length;
+      guidingRms = { ra: avgRa, dec: avgDec };
+    }
+
+    return {
+      frames,
+      median_hfr: medianHfr,
+      reject_rate: rejectRate,
+      guiding_rms: guidingRms,
+      notes: sess.notes,
+    };
   }
 
   // ===== USER PROFILES =====

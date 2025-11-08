@@ -24,21 +24,61 @@ function wrapResponse(data: any, extra?: any) {
 
 export function registerPlanQaRoutes(app: Express) {
   app.use("/astrodb/v1/planqa", checkPlanQaFeatureFlag);
+  app.use("/astrodb/v1/plan", checkPlanQaFeatureFlag);
+  app.use("/astrodb/v1/qa", checkPlanQaFeatureFlag);
 
   // ===== RECIPES =====
 
   app.get("/astrodb/v1/planqa/recipes", async (req, res) => {
     try {
-      const { target_type, filter_name, name, limit } = req.query;
+      const { target_type, target_class, filter_name, filter, name, limit } = req.query;
 
       const filters: any = {};
+      if (target_class) filters.targetClass = String(target_class);
       if (target_type) filters.targetType = String(target_type);
+      if (filter) filters.filter = String(filter);
       if (filter_name) filters.filterName = String(filter_name);
       if (name) filters.name = String(name);
       if (limit) filters.limit = parseInt(String(limit));
 
       const recipes = await planQaStorage.getRecipes(filters);
       res.json(wrapResponse(recipes));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== SMART RECIPE (Rule-based) =====
+
+  app.get("/astrodb/v1/plan/recipe", async (req, res) => {
+    try {
+      const { target_class, sky, filter, train_id } = req.query;
+
+      if (!target_class || !sky || !filter) {
+        return res.status(400).json({
+          error: "Required parameters: target_class, sky, filter",
+        });
+      }
+
+      const skyMpsas = parseFloat(String(sky));
+      if (isNaN(skyMpsas)) {
+        return res.status(400).json({ error: "Invalid sky value (expected mpsas)" });
+      }
+
+      const recipe = await planQaStorage.findRecipeByRule({
+        targetClass: String(target_class),
+        sky: skyMpsas,
+        filter: String(filter),
+        trainId: train_id ? String(train_id) : undefined,
+      });
+
+      if (!recipe) {
+        return res.status(404).json({
+          error: "No recipe found matching the criteria",
+        });
+      }
+
+      res.json(wrapResponse(recipe));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -151,6 +191,27 @@ export function registerPlanQaRoutes(app: Express) {
       if (!summary) {
         return res.status(404).json({ error: "Session not found" });
       }
+      res.json(wrapResponse(summary));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== QA SUMMARY =====
+
+  app.get("/astrodb/v1/qa/summary", async (req, res) => {
+    try {
+      const { session_id } = req.query;
+
+      if (!session_id) {
+        return res.status(400).json({ error: "Required parameter: session_id" });
+      }
+
+      const summary = await planQaStorage.getSessionQaSummary(String(session_id));
+      if (!summary) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
       res.json(wrapResponse(summary));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
