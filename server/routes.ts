@@ -3,7 +3,13 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { telescopeSimulator } from "./services/telescope-simulator";
-import { ascomClient } from "./services/ascom-client";
+import { 
+  ascomTelescope, 
+  ascomCamera, 
+  ascomFocuser, 
+  ascomDiscovery,
+  ascomClient // backward compatibility
+} from "./services/ascom-client";
 import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
 import { imagingSequenceExecutor } from "./services/imaging-sequence";
 import type { SystemStatus } from "@shared/schema";
@@ -27,16 +33,136 @@ function broadcastStatus(status: SystemStatus) {
 // Status update interval
 let statusInterval: NodeJS.Timeout | null = null;
 
+// Get status from ASCOM devices
+async function getAscomStatus(): Promise<SystemStatus> {
+  try {
+    const [telConnected, camConnected, focConnected] = await Promise.all([
+      ascomTelescope.isConnected().catch(() => false),
+      ascomCamera.isConnected().catch(() => false),
+      ascomFocuser.isConnected().catch(() => false),
+    ]);
+
+    // Telescope status
+    let telescopeState = {
+      connected: telConnected,
+      connectionType: "ascom" as const,
+      tracking: false,
+      slewing: false,
+      parked: true,
+      position: { ra: 0, dec: 0, alt: 0, az: 0 },
+    };
+
+    if (telConnected) {
+      const [ra, dec, alt, az, slewing, tracking, parked] = await Promise.all([
+        ascomTelescope.getRightAscension().catch(() => 0),
+        ascomTelescope.getDeclination().catch(() => 0),
+        ascomTelescope.getAltitude().catch(() => 0),
+        ascomTelescope.getAzimuth().catch(() => 0),
+        ascomTelescope.isSlewing().catch(() => false),
+        ascomTelescope.isTracking().catch(() => false),
+        ascomTelescope.isParked().catch(() => true),
+      ]);
+
+      telescopeState = {
+        connected: telConnected,
+        connectionType: "ascom",
+        tracking,
+        slewing,
+        parked,
+        position: { ra, dec, alt, az },
+      };
+    }
+
+    // Camera status
+    let cameraState = {
+      connected: camConnected,
+      exposing: false,
+      coolerOn: false,
+      exposureTime: 30,
+      gain: 50,
+      binning: 1 as 1 | 2 | 3 | 4,
+      progress: 0,
+    };
+
+    if (camConnected) {
+      const [cameraStateNum, coolerOn, gain, binX, progress] = await Promise.all([
+        ascomCamera.getCameraState().catch(() => 0),
+        ascomCamera.getCoolerOn().catch(() => false),
+        ascomCamera.getGain().catch(() => 50),
+        ascomCamera.getBinX().catch(() => 1),
+        ascomCamera.getPercentCompleted().catch(() => 0),
+      ]);
+
+      const exposing = cameraStateNum === 2; // CameraState.Exposing = 2
+      const temperature = await ascomCamera.getCCDTemperature().catch(() => undefined);
+
+      cameraState = {
+        connected: camConnected,
+        exposing,
+        temperature,
+        coolerOn,
+        exposureTime: 30,
+        gain,
+        binning: binX as 1 | 2 | 3 | 4,
+        progress: exposing ? progress : 0,
+      };
+    }
+
+    // Focuser status
+    let focuserState = {
+      connected: focConnected,
+      moving: false,
+      position: 0,
+      maxPosition: 10000,
+    };
+
+    if (focConnected) {
+      const [position, maxStep, moving] = await Promise.all([
+        ascomFocuser.getPosition().catch(() => 0),
+        ascomFocuser.getMaxStep().catch(() => 10000),
+        ascomFocuser.isMoving().catch(() => false),
+      ]);
+
+      const temperature = await ascomFocuser.getTemperature().catch(() => undefined);
+
+      focuserState = {
+        connected: focConnected,
+        moving,
+        position,
+        temperature,
+        maxPosition: maxStep,
+      };
+    }
+
+    return {
+      telescope: telescopeState,
+      camera: cameraState,
+      focuser: focuserState,
+      calibration: {},
+      lastUpdate: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("Error getting ASCOM status:", error);
+    throw error;
+  }
+}
+
 function startStatusBroadcast() {
   if (statusInterval) return;
   
-  statusInterval = setInterval(() => {
-    const status = activeConnection === "mock" 
-      ? telescopeSimulator.getStatus()
-      : null; // ASCOM status would be fetched here
-    
-    if (status) {
-      broadcastStatus(status);
+  statusInterval = setInterval(async () => {
+    try {
+      const status = activeConnection === "mock" 
+        ? telescopeSimulator.getStatus()
+        : activeConnection === "ascom"
+        ? await getAscomStatus()
+        : null;
+      
+      if (status) {
+        broadcastStatus(status);
+      }
+    } catch (error) {
+      console.error("Error broadcasting status:", error);
     }
   }, 500); // Broadcast every 500ms
 }
@@ -160,6 +286,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
               telescopeSimulator.startPolarAlignment();
               break;
           }
+        } else if (activeConnection === "ascom") {
+          switch (action) {
+            case "goto_target":
+              // Look up target coordinates
+              const target = await storage.getCelestialTargetByName(structuredCommand.target);
+              if (target) {
+                const canSlewAsync = await ascomTelescope.canSlewAsync().catch(() => false);
+                if (canSlewAsync) {
+                  await ascomTelescope.slewToCoordinatesAsync(target.ra, target.dec);
+                } else {
+                  await ascomTelescope.slewToCoordinates(target.ra, target.dec);
+                }
+                const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+                if (canSetTracking) {
+                  await ascomTelescope.setTracking(true);
+                }
+              }
+              break;
+            
+            case "goto_coordinates":
+              const canSlewAsync = await ascomTelescope.canSlewAsync().catch(() => false);
+              if (canSlewAsync) {
+                await ascomTelescope.slewToCoordinatesAsync(structuredCommand.ra, structuredCommand.dec);
+              } else {
+                await ascomTelescope.slewToCoordinates(structuredCommand.ra, structuredCommand.dec);
+              }
+              break;
+            
+            case "track":
+              const trackTarget = await storage.getCelestialTargetByName(structuredCommand.target);
+              if (trackTarget) {
+                const canSlew = await ascomTelescope.canSlewAsync().catch(() => false);
+                if (canSlew) {
+                  await ascomTelescope.slewToCoordinatesAsync(trackTarget.ra, trackTarget.dec);
+                } else {
+                  await ascomTelescope.slewToCoordinates(trackTarget.ra, trackTarget.dec);
+                }
+                const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+                if (canSetTracking) {
+                  await ascomTelescope.setTracking(true);
+                }
+              }
+              break;
+            
+            case "stop_tracking":
+              const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+              if (canSetTracking) {
+                await ascomTelescope.setTracking(false);
+              }
+              break;
+            
+            case "park":
+              const canPark = await ascomTelescope.canPark().catch(() => false);
+              if (canPark) {
+                await ascomTelescope.park();
+              }
+              break;
+            
+            case "home":
+              const canFindHome = await ascomTelescope.canFindHome().catch(() => false);
+              if (canFindHome) {
+                await ascomTelescope.findHome();
+              }
+              break;
+            
+            case "capture":
+              if (structuredCommand.gain !== undefined) {
+                await ascomCamera.setGain(structuredCommand.gain).catch(() => {});
+              }
+              await ascomCamera.startExposure(structuredCommand.exposureTime, true);
+              break;
+            
+            case "focus":
+              const isAbsolute = await ascomFocuser.isAbsolute().catch(() => false);
+              if (isAbsolute) {
+                const currentPos = await ascomFocuser.getPosition();
+                await ascomFocuser.move(currentPos + structuredCommand.steps);
+              }
+              break;
+            
+            case "calibrate":
+              // ASCOM doesn't have a built-in calibration command
+              // This would typically involve plate solving or external tools
+              break;
+          }
         }
 
         res.json({ success: true, command, nlpResult });
@@ -204,7 +415,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         telescopeSimulator.connect();
         startStatusBroadcast();
       } else {
-        await ascomClient.connect();
+        // Connect to all ASCOM devices that are available
+        await Promise.allSettled([
+          ascomTelescope.connect(),
+          ascomCamera.connect(),
+          ascomFocuser.connect(),
+        ]);
         startStatusBroadcast();
       }
 
@@ -219,7 +435,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeConnection === "mock") {
         telescopeSimulator.disconnect();
       } else if (activeConnection === "ascom") {
-        await ascomClient.disconnect();
+        // Disconnect all ASCOM devices
+        await Promise.allSettled([
+          ascomTelescope.disconnect(),
+          ascomCamera.disconnect(),
+          ascomFocuser.disconnect(),
+        ]);
       }
 
       activeConnection = null;
@@ -265,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const status = activeConnection === "mock"
         ? telescopeSimulator.getStatus()
-        : await ascomClient.getStatus();
+        : await getAscomStatus();
 
       res.json(status);
     } catch (error: any) {
@@ -287,7 +508,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (activeConnection === "ascom") {
         if (ra !== undefined && dec !== undefined) {
-          await ascomClient.slewToCoordinatesAsync(ra, dec);
+          // Check if async slewing is supported
+          const canSlewAsync = await ascomTelescope.canSlewAsync().catch(() => false);
+          if (canSlewAsync) {
+            await ascomTelescope.slewToCoordinatesAsync(ra, dec);
+          } else {
+            // Fall back to synchronous slew if async not supported
+            await ascomTelescope.slewToCoordinates(ra, dec);
+          }
+        } else if (alt !== undefined && az !== undefined) {
+          // Check if Alt/Az slewing is supported
+          const canSlewAltAzAsync = await ascomTelescope.canSlewAltAzAsync().catch(() => false);
+          if (canSlewAltAzAsync) {
+            await ascomTelescope.slewToAltAzAsync(alt, az);
+          } else {
+            const canSlewAltAz = await ascomTelescope.canSlewAltAz().catch(() => false);
+            if (canSlewAltAz) {
+              await ascomTelescope.slewToAltAz(alt, az);
+            } else {
+              return res.status(400).json({ error: "Telescope does not support Alt/Az slewing" });
+            }
+          }
         }
       }
 
@@ -303,6 +544,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (activeConnection === "mock") {
         await telescopeSimulator.slew(direction);
+      } else if (activeConnection === "ascom") {
+        // Map direction to ASCOM axis and rate
+        // Axis: 0 = Primary (RA/Az), 1 = Secondary (Dec/Alt)
+        // Direction: north/south = Axis 1, east/west = Axis 0
+        const axisMap: Record<string, { axis: number; rate: number }> = {
+          north: { axis: 1, rate: 1.0 },
+          south: { axis: 1, rate: -1.0 },
+          east: { axis: 0, rate: 1.0 },
+          west: { axis: 0, rate: -1.0 },
+        };
+
+        const slewConfig = axisMap[direction];
+        if (!slewConfig) {
+          return res.status(400).json({ error: "Invalid slew direction" });
+        }
+
+        const canMove = await ascomTelescope.canMoveAxis(slewConfig.axis).catch(() => false);
+        if (canMove) {
+          await ascomTelescope.moveAxis(slewConfig.axis, slewConfig.rate);
+        } else {
+          return res.status(400).json({ error: `Telescope does not support axis ${slewConfig.axis} movement` });
+        }
       }
 
       res.json({ success: true });
@@ -325,8 +588,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await telescopeSimulator.gotoCoordinates(celestialTarget.ra, celestialTarget.dec);
         telescopeSimulator.startTracking(celestialTarget.name);
       } else if (activeConnection === "ascom") {
-        await ascomClient.slewToCoordinatesAsync(celestialTarget.ra, celestialTarget.dec);
-        await ascomClient.setTracking(true);
+        // Slew to target
+        const canSlewAsync = await ascomTelescope.canSlewAsync().catch(() => false);
+        if (canSlewAsync) {
+          await ascomTelescope.slewToCoordinatesAsync(celestialTarget.ra, celestialTarget.dec);
+        } else {
+          await ascomTelescope.slewToCoordinates(celestialTarget.ra, celestialTarget.dec);
+        }
+        
+        // Enable tracking if supported
+        const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+        if (canSetTracking) {
+          await ascomTelescope.setTracking(true);
+        }
       }
 
       res.json({ success: true });
@@ -340,7 +614,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeConnection === "mock") {
         telescopeSimulator.stopTracking();
       } else if (activeConnection === "ascom") {
-        await ascomClient.setTracking(false);
+        const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+        if (canSetTracking) {
+          await ascomTelescope.setTracking(false);
+        } else {
+          return res.status(400).json({ error: "Telescope does not support tracking control" });
+        }
       }
 
       res.json({ success: true });
@@ -354,7 +633,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeConnection === "mock") {
         telescopeSimulator.park();
       } else if (activeConnection === "ascom") {
-        await ascomClient.park();
+        const canPark = await ascomTelescope.canPark().catch(() => false);
+        if (canPark) {
+          await ascomTelescope.park();
+        } else {
+          return res.status(400).json({ error: "Telescope does not support parking" });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/telescope/unpark", async (req, res) => {
+    try {
+      if (activeConnection === "mock") {
+        // Mock simulator doesn't have explicit unpark, just move out of parked state
+        telescopeSimulator.home();
+      } else if (activeConnection === "ascom") {
+        const canUnpark = await ascomTelescope.canUnpark().catch(() => false);
+        if (canUnpark) {
+          await ascomTelescope.unpark();
+        } else {
+          return res.status(400).json({ error: "Telescope does not support unparking" });
+        }
       }
 
       res.json({ success: true });
@@ -368,7 +672,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeConnection === "mock") {
         telescopeSimulator.home();
       } else if (activeConnection === "ascom") {
-        await ascomClient.findHome();
+        const canFindHome = await ascomTelescope.canFindHome().catch(() => false);
+        if (canFindHome) {
+          await ascomTelescope.findHome();
+        } else {
+          return res.status(400).json({ error: "Telescope does not support finding home" });
+        }
       }
 
       res.json({ success: true });
@@ -382,8 +691,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeConnection === "mock") {
         telescopeSimulator.emergencyStop();
       } else if (activeConnection === "ascom") {
-        await ascomClient.abortSlew();
-        await ascomClient.setTracking(false);
+        // Abort any slewing
+        await ascomTelescope.abortSlew().catch(() => {});
+        
+        // Stop any axis movement
+        await Promise.allSettled([
+          ascomTelescope.moveAxis(0, 0),
+          ascomTelescope.moveAxis(1, 0),
+        ]);
+        
+        // Disable tracking if supported
+        const canSetTracking = await ascomTelescope.canSetTracking().catch(() => false);
+        if (canSetTracking) {
+          await ascomTelescope.setTracking(false);
+        }
       }
 
       res.json({ success: true });
@@ -400,6 +721,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (activeConnection === "mock") {
         await telescopeSimulator.startExposure(exposureTime, gain, binning);
+      } else if (activeConnection === "ascom") {
+        // Set camera parameters
+        if (gain !== undefined) {
+          await ascomCamera.setGain(gain).catch(() => {});
+        }
+        if (binning !== undefined) {
+          await ascomCamera.setBinX(binning).catch(() => {});
+          await ascomCamera.setBinY(binning).catch(() => {});
+        }
+        
+        // Start exposure (true = light frame)
+        await ascomCamera.startExposure(exposureTime, true);
       }
 
       res.json({ success: true });
@@ -412,6 +745,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       if (activeConnection === "mock") {
         telescopeSimulator.abortExposure();
+      } else if (activeConnection === "ascom") {
+        const canAbort = await ascomCamera.canAbortExposure().catch(() => false);
+        if (canAbort) {
+          await ascomCamera.abortExposure();
+        } else {
+          const canStop = await ascomCamera.canStopExposure().catch(() => false);
+          if (canStop) {
+            await ascomCamera.stopExposure();
+          } else {
+            return res.status(400).json({ error: "Camera does not support aborting exposure" });
+          }
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/camera/cooler", async (req, res) => {
+    try {
+      const { enabled, temperature } = req.body;
+
+      if (activeConnection === "ascom") {
+        if (temperature !== undefined) {
+          const canSetTemp = await ascomCamera.canSetCCDTemperature().catch(() => false);
+          if (canSetTemp) {
+            await ascomCamera.setCCDTemperature(temperature);
+          }
+        }
+        if (enabled !== undefined) {
+          await ascomCamera.setCoolerOn(enabled);
+        }
       }
 
       res.json({ success: true });
@@ -431,6 +798,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await telescopeSimulator.moveFocuserAbsolute(position);
         } else if (action === "move_relative" && steps !== undefined) {
           await telescopeSimulator.moveFocuser(steps);
+        }
+      } else if (activeConnection === "ascom") {
+        const isAbsolute = await ascomFocuser.isAbsolute().catch(() => false);
+        
+        if (action === "move_absolute" && position !== undefined) {
+          if (isAbsolute) {
+            await ascomFocuser.move(position);
+          } else {
+            return res.status(400).json({ error: "Focuser does not support absolute positioning" });
+          }
+        } else if (action === "move_relative" && steps !== undefined) {
+          if (isAbsolute) {
+            // For absolute focusers, calculate new position
+            const currentPos = await ascomFocuser.getPosition();
+            await ascomFocuser.move(currentPos + steps);
+          } else {
+            return res.status(400).json({ error: "Relative focuser not yet supported" });
+          }
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/focuser/halt", async (req, res) => {
+    try {
+      if (activeConnection === "ascom") {
+        const canHalt = await ascomFocuser.canHalt().catch(() => false);
+        if (canHalt) {
+          await ascomFocuser.halt();
+        } else {
+          return res.status(400).json({ error: "Focuser does not support halt" });
         }
       }
 
@@ -475,6 +877,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== Device Discovery =====
+
+  app.get("/api/ascom/discover", async (req, res) => {
+    try {
+      const devices = await ascomDiscovery.discoverDevices();
+      res.json(devices);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/ascom/server-info", async (req, res) => {
+    try {
+      const info = await ascomDiscovery.getServerInfo();
+      res.json(info);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
