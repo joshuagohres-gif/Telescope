@@ -92,8 +92,20 @@ export const submetric = pgTable('planqa_submetric', {
   sessionMetricIdx: index('planqa_submetric_session_metric_idx').on(table.sessionId, table.metricName),
 }));
 
+// User site registry (simple site list for planning)
+export const userSiteRegistry = pgTable('planqa_site_profile', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  lat: real('lat').notNull(),
+  lon: real('lon').notNull(),
+  elevM: real('elev_m').notNull(),
+  tz: text('tz').notNull(),
+}, (table) => ({
+  nameIdx: index('planqa_site_profile_name_idx').on(table.name),
+}));
+
 // User site profiles (personalization)
-export const siteProfile = pgTable('planqa_site_profile', {
+export const siteProfile = pgTable('planqa_user_site_profile', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id', { length: 128 }).notNull(),
   siteId: uuid('site_id').notNull(),
@@ -107,7 +119,7 @@ export const siteProfile = pgTable('planqa_site_profile', {
   }>(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (table) => ({
-  userSiteIdx: uniqueIndex('planqa_site_profile_user_site_idx').on(table.userId, table.siteId),
+  userSiteIdx: uniqueIndex('planqa_user_site_profile_user_site_idx').on(table.userId, table.siteId),
 }));
 
 // User preferences and settings
@@ -134,6 +146,7 @@ export const insertRecipeSchema = createInsertSchema(recipe).omit({ id: true, cr
 export const insertSnrModelSchema = createInsertSchema(snrModel).omit({ id: true, updatedAt: true });
 export const insertSessionSchema = createInsertSchema(session).omit({ id: true, createdAt: true });
 export const insertSubmetricSchema = createInsertSchema(submetric).omit({ id: true });
+export const insertUserSiteRegistrySchema = createInsertSchema(userSiteRegistry).omit({ id: true });
 export const insertSiteProfileSchema = createInsertSchema(siteProfile).omit({ id: true, updatedAt: true });
 export const insertUserSettingSchema = createInsertSchema(userSetting).omit({ id: true, updatedAt: true });
 
@@ -143,5 +156,6 @@ export type Recipe = typeof recipe.$inferSelect;
 export type SnrModel = typeof snrModel.$inferSelect;
 export type Session = typeof session.$inferSelect;
 export type Submetric = typeof submetric.$inferSelect;
+export type UserSiteRegistry = typeof userSiteRegistry.$inferSelect;
 export type SiteProfile = typeof siteProfile.$inferSelect;
 export type UserSetting = typeof userSetting.$inferSelect;

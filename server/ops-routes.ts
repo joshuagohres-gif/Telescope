@@ -23,7 +23,9 @@ function wrapResponse(data: any, extra?: any) {
 }
 
 export function registerOpsRoutes(app: Express) {
+  // Apply feature flag to all ops and user routes
   app.use("/astrodb/v1/ops", checkOpsFeatureFlag);
+  app.use("/astrodb/v1/user", checkOpsFeatureFlag);
 
   // ===== SITES =====
 
@@ -82,24 +84,16 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== HORIZON =====
 
-  app.get("/astrodb/v1/ops/horizon/:site_id", async (req, res) => {
+  app.get("/astrodb/v1/ops/horizon", async (req, res) => {
     try {
-      const horizonData = await opsStorage.getHorizon(req.params.site_id);
-      res.json(wrapResponse(horizonData));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/astrodb/v1/ops/horizon/:site_id/interpolate", async (req, res) => {
-    try {
-      const azDeg = parseFloat(String(req.query.az_deg));
-      if (isNaN(azDeg)) {
-        return res.status(400).json({ error: "az_deg query parameter required" });
+      const siteId = req.query.site_id as string;
+      if (!siteId) {
+        return res.status(400).json({ error: "site_id query parameter required" });
       }
 
-      const altLimit = await opsStorage.interpolateHorizonAlt(req.params.site_id, azDeg);
-      res.json(wrapResponse({ az_deg: azDeg, alt_limit_deg: altLimit }));
+      // Return 360 interpolated points (0-359 degrees)
+      const horizonData = await opsStorage.getHorizonInterpolated(siteId);
+      res.json(wrapResponse(horizonData));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -118,17 +112,22 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== DEW RISK =====
 
-  app.get("/astrodb/v1/ops/dew/risk/:site_id", async (req, res) => {
+  app.get("/astrodb/v1/ops/dew/risk", async (req, res) => {
     try {
-      const { from, to, min_risk } = req.query;
+      const siteId = req.query.site_id as string;
+      const tsStr = req.query.ts as string;
 
-      const filters: any = { siteId: req.params.site_id };
-      if (from) filters.from = new Date(String(from));
-      if (to) filters.to = new Date(String(to));
-      if (min_risk) filters.minRisk = String(min_risk);
+      if (!siteId || !tsStr) {
+        return res.status(400).json({ error: "site_id and ts query parameters required" });
+      }
 
-      const events = await opsStorage.getDewRisk(filters);
-      res.json(wrapResponse(events));
+      const ts = new Date(tsStr);
+      if (isNaN(ts.getTime())) {
+        return res.status(400).json({ error: "Invalid ts format (expected ISO 8601)" });
+      }
+
+      const result = await opsStorage.calculateDewRisk(siteId, ts);
+      res.json(wrapResponse(result));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -189,6 +188,46 @@ export function registerOpsRoutes(app: Express) {
         return res.status(404).json({ error: "Light pollution data not found for site" });
       }
       res.json(wrapResponse(lpData));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== LIGHT POLLUTION LOOKUP =====
+
+  app.get("/astrodb/v1/ops/lightpollution", async (req, res) => {
+    try {
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+
+      if (!latStr || !lonStr) {
+        return res.status(400).json({ error: "lat and lon query parameters required" });
+      }
+
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+
+      if (isNaN(lat) || isNaN(lon)) {
+        return res.status(400).json({ error: "Invalid lat/lon values" });
+      }
+
+      const result = await opsStorage.findNearestSiteLp(lat, lon);
+      if (!result) {
+        return res.status(404).json({ error: "No light pollution data found" });
+      }
+
+      res.json(wrapResponse(result));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== USER SITES =====
+
+  app.get("/astrodb/v1/user/sites", async (req, res) => {
+    try {
+      const sites = await opsStorage.getUserSites();
+      res.json(wrapResponse(sites));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -19,6 +19,7 @@ import {
   type LpTile,
   type SiteLp,
 } from "../shared/ops-schema";
+import { userSiteRegistry, type UserSiteRegistry } from "../shared/planqa-schema";
 
 // ===== OPERATIONS & ENVIRONMENT STORAGE =====
 
@@ -122,27 +123,50 @@ export class OpsStorage {
     const points = await this.getHorizon(siteId);
     if (points.length === 0) return 0;
 
+    // Normalize azimuth to 0-360
+    let normalizedAz = azDeg;
+    while (normalizedAz < 0) normalizedAz += 360;
+    while (normalizedAz >= 360) normalizedAz -= 360;
+
     // Simple linear interpolation
     const sorted = points.sort((a, b) => a.azDeg - b.azDeg);
     
-    // Find bracketing points
+    // Find bracketing points (handle wrap-around at 360/0)
     let before = sorted[sorted.length - 1];
     let after = sorted[0];
     
     for (let i = 0; i < sorted.length; i++) {
-      if (sorted[i].azDeg <= azDeg) {
+      if (sorted[i].azDeg <= normalizedAz) {
         before = sorted[i];
       }
-      if (sorted[i].azDeg >= azDeg) {
+      if (sorted[i].azDeg >= normalizedAz) {
         after = sorted[i];
         break;
       }
     }
 
+    // Handle wrap-around case
+    if (before.azDeg > normalizedAz) {
+      // We're wrapping around 360/0
+      const beforeAz = before.azDeg - 360;
+      const fraction = (normalizedAz - beforeAz) / (after.azDeg - beforeAz);
+      return before.altLimitDeg + fraction * (after.altLimitDeg - before.altLimitDeg);
+    }
+
     if (before.azDeg === after.azDeg) return before.altLimitDeg;
 
-    const fraction = (azDeg - before.azDeg) / (after.azDeg - before.azDeg);
+    const fraction = (normalizedAz - before.azDeg) / (after.azDeg - before.azDeg);
     return before.altLimitDeg + fraction * (after.altLimitDeg - before.altLimitDeg);
+  }
+
+  async getHorizonInterpolated(siteId: string): Promise<Array<{ az_deg: number; alt_limit_deg: number }>> {
+    // Return 360 points (0-359 degrees) with interpolated altitude limits
+    const result = [];
+    for (let az = 0; az < 360; az++) {
+      const altLimit = await this.interpolateHorizonAlt(siteId, az);
+      result.push({ az_deg: az, alt_limit_deg: altLimit });
+    }
+    return result;
   }
 
   // ===== OBSTACLES =====
@@ -187,6 +211,51 @@ export class OpsStorage {
     }
 
     return results;
+  }
+
+  async calculateDewRisk(siteId: string, ts: Date): Promise<{ margin_c: number; risk: 'LOW' | 'MED' | 'HIGH' }> {
+    // Get meteo data for the specified time (find closest within 1 hour)
+    const oneHourAgo = new Date(ts.getTime() - 3600000);
+    const oneHourLater = new Date(ts.getTime() + 3600000);
+    
+    const allMeteo = await this.db
+      .select()
+      .from(meteo)
+      .where(
+        and(
+          eq(meteo.siteId, siteId),
+          gte(meteo.ts, oneHourAgo),
+          lte(meteo.ts, oneHourLater)
+        )
+      );
+
+    if (allMeteo.length === 0) {
+      throw new Error(`No meteo data found for site ${siteId} near time ${ts.toISOString()}`);
+    }
+
+    // Find closest by time difference
+    let closest = allMeteo[0];
+    let minDiff = Math.abs(closest.ts.getTime() - ts.getTime());
+    for (const m of allMeteo) {
+      const diff = Math.abs(m.ts.getTime() - ts.getTime());
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = m;
+      }
+    }
+
+    const marginC = closest.tempC - closest.dewpointC;
+    
+    let risk: 'LOW' | 'MED' | 'HIGH';
+    if (marginC > 4) {
+      risk = 'LOW';
+    } else if (marginC >= 2) {
+      risk = 'MED';
+    } else {
+      risk = 'HIGH';
+    }
+
+    return { margin_c: marginC, risk };
   }
 
   async getDewProfiles(deviceKey?: string): Promise<any[]> {
@@ -245,6 +314,62 @@ export class OpsStorage {
       .where(eq(siteLp.siteId, siteId))
       .limit(1);
     return results[0];
+  }
+
+  async findNearestSiteLp(lat: number, lon: number): Promise<{ mpsas_est: number } | null> {
+    // Find nearest site with LP data using haversine formula
+    const sitesWithLp = await this.db
+      .select({
+        siteId: site.id,
+        lat: site.lat,
+        lon: site.lon,
+        mpsasEst: siteLp.mpsasEst,
+      })
+      .from(site)
+      .innerJoin(siteLp, eq(site.id, siteLp.siteId));
+
+    if (sitesWithLp.length === 0) {
+      return null;
+    }
+
+    // Calculate distances and find nearest
+    let nearest = sitesWithLp[0];
+    let minDistance = Infinity;
+
+    for (const s of sitesWithLp) {
+      const distance = this.haversineDistance(lat, lon, s.lat, s.lon);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearest = s;
+      }
+    }
+
+    return { mpsas_est: nearest.mpsasEst };
+  }
+
+  private haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371; // Earth radius in km
+    const dLat = this.deg2rad(lat2 - lat1);
+    const dLon = this.deg2rad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private deg2rad(deg: number): number {
+    return deg * (Math.PI / 180);
+  }
+
+  // ===== USER SITE REGISTRY =====
+
+  async getUserSites(): Promise<UserSiteRegistry[]> {
+    return await this.db
+      .select()
+      .from(userSiteRegistry)
+      .orderBy(userSiteRegistry.name);
   }
 
   // ===== ADMIN/UPSERT METHODS =====
