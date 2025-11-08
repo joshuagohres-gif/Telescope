@@ -14,7 +14,7 @@ A modern web-based telescope control system with ASCOM Alpaca support and real-t
 
 ### Astronomical Knowledge Base (AstroDB)
 
-**NEW**: Four comprehensive read-only APIs providing access to:
+Four comprehensive read-only APIs providing access to:
 
 - **Equipment Database**: 2,000+ astronomy devices (mounts, cameras, focusers) with detailed specs
 - **Catalog**: Top 500 night-sky objects (galaxies, nebulae, clusters) with coordinates
@@ -22,6 +22,18 @@ A modern web-based telescope control system with ASCOM Alpaca support and real-t
 - **Events**: 2025-2026 major astronomical events with visibility information
 
 See [README-astrodb.md](./README-astrodb.md) for complete documentation.
+
+### Telescope Design Knowledge Base
+
+**NEW**: Comprehensive design methodology database for 3D-printable telescopes:
+
+- **40+ Concepts**: Design patterns across optics, mechanics, testing, safety
+- **25+ Equations**: Verified formulas with unit tests (secondary sizing, focal ratios, etc.)
+- **18+ Dimensioned Examples**: Complete telescope designs (80-200mm apertures) with BoMs
+- **Safety Procedures**: Critical protocols for solar observing and laser collimation
+- **Training Export**: NDJSON format for generative design systems
+
+See [README-design-kb.md](./README-design-kb.md) for complete documentation.
 
 ## Setup
 

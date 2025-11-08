@@ -13,6 +13,7 @@ import {
 import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
 import { imagingSequenceExecutor } from "./services/imaging-sequence";
 import { registerAstroDbRoutes } from "./astrodb-routes";
+import { registerDesignRoutes } from "./design-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -190,6 +191,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register AstroDB routes (feature-flagged)
   registerAstroDbRoutes(app);
+  
+  // Register Design KB routes (feature-flagged)
+  registerDesignRoutes(app);
 
   // WebSocket server (on distinct path to not conflict with Vite HMR)
   // Reference: javascript_websocket blueprint
