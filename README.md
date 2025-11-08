@@ -35,6 +35,36 @@ See [README-astrodb.md](./README-astrodb.md) for complete documentation.
 
 See [README-design-kb.md](./README-design-kb.md) for complete documentation.
 
+### Extended AstroDB: Operations, Calibration, Targeting & Planning
+
+**NEW**: Four advanced knowledge backends for professional observatory operations:
+
+1. **Operations & Environment** (`/astrodb/v1/ops/*`)
+   - Weather/seeing forecasts (7Timer integration)
+   - Horizon profiles & obstacle mapping
+   - Dew risk calculation & heater control hints
+   - Light pollution tiles (World Atlas 2015)
+
+2. **Equipment & Calibration** (`/astrodb/v1/calib/*`)
+   - Master calibration frame library
+   - Autofocus curves with temperature compensation
+   - Pointing models & PEC profiles
+   - Filter transmission & sensor QE curves
+
+3. **Targeting & Alerts** (`/astrodb/v1/targets/*`)
+   - Transient alerts (TNS, GCN: supernovae, novae, GRBs)
+   - Minor planet ephemerides (50+ tracked objects)
+   - Lunar/planetary feature gazetteer (400+ features)
+   - Star-hop waypoints for deep-sky navigation
+
+4. **Planning, QA & Personalization** (`/astrodb/v1/planqa/*`)
+   - Exposure recipe optimizer
+   - SNR estimation models
+   - Session telemetry & quality metrics
+   - User site profiles & preferences
+
+See [README-extended-astrodb.md](./README-extended-astrodb.md) for complete API documentation.
+
 ## Setup
 
 ### Prerequisites

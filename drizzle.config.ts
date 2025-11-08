@@ -6,7 +6,15 @@ if (!process.env.DATABASE_URL) {
 
 export default defineConfig({
   out: "./migrations",
-  schema: ["./shared/schema.ts", "./shared/astrodb-schema.ts", "./shared/design-schema.ts"],
+  schema: [
+    "./shared/schema.ts",
+    "./shared/astrodb-schema.ts",
+    "./shared/design-schema.ts",
+    "./shared/ops-schema.ts",
+    "./shared/calib-schema.ts",
+    "./shared/targets-schema.ts",
+    "./shared/planqa-schema.ts",
+  ],
   dialect: "postgresql",
   dbCredentials: {
     url: process.env.DATABASE_URL,

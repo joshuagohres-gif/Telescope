@@ -14,6 +14,10 @@ import { interpretCommand, executeInterpretedCommand } from "./services/nlp";
 import { imagingSequenceExecutor } from "./services/imaging-sequence";
 import { registerAstroDbRoutes } from "./astrodb-routes";
 import { registerDesignRoutes } from "./design-routes";
+import { registerOpsRoutes } from "./ops-routes";
+import { registerCalibRoutes } from "./calib-routes";
+import { registerTargetsRoutes } from "./targets-routes";
+import { registerPlanQaRoutes } from "./planqa-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -194,6 +198,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Register Design KB routes (feature-flagged)
   registerDesignRoutes(app);
+  
+  // Register Operations & Environment routes (feature-flagged)
+  registerOpsRoutes(app);
+  
+  // Register Calibration routes (feature-flagged)
+  registerCalibRoutes(app);
+  
+  // Register Targets & Alerts routes (feature-flagged)
+  registerTargetsRoutes(app);
+  
+  // Register Planning, QA & Personalization routes (feature-flagged)
+  registerPlanQaRoutes(app);
 
   // WebSocket server (on distinct path to not conflict with Vite HMR)
   // Reference: javascript_websocket blueprint
