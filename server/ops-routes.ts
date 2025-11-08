@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { opsStorage } from "./ops-storage";
 
 // Feature flag middleware
@@ -22,12 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerOpsRoutes(app: Express) {
-  app.use("/astrodb/v1/ops", checkOpsFeatureFlag);
+export function createOpsRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkOpsFeatureFlag);
 
   // ===== SITES =====
 
-  app.get("/astrodb/v1/ops/sites", async (req, res) => {
+  router.get("/ops/sites", async (req, res) => {
     try {
       const { name, lat, lon, radius_km } = req.query;
 
@@ -48,7 +52,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/sites/:id", async (req, res) => {
+  router.get("/ops/sites/:id", async (req, res) => {
     try {
       const site = await opsStorage.getSiteById(req.params.id);
       if (!site) {
@@ -62,7 +66,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== WEATHER/METEO =====
 
-  app.get("/astrodb/v1/ops/weather/:site_id", async (req, res) => {
+  router.get("/ops/weather/:site_id", async (req, res) => {
     try {
       const { from, to, max_cloud, min_transparency, max_seeing } = req.query;
 
@@ -82,24 +86,16 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== HORIZON =====
 
-  app.get("/astrodb/v1/ops/horizon/:site_id", async (req, res) => {
+  router.get("/ops/horizon", async (req, res) => {
     try {
-      const horizonData = await opsStorage.getHorizon(req.params.site_id);
-      res.json(wrapResponse(horizonData));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/astrodb/v1/ops/horizon/:site_id/interpolate", async (req, res) => {
-    try {
-      const azDeg = parseFloat(String(req.query.az_deg));
-      if (isNaN(azDeg)) {
-        return res.status(400).json({ error: "az_deg query parameter required" });
+      const siteId = req.query.site_id as string;
+      if (!siteId) {
+        return res.status(400).json({ error: "site_id query parameter required" });
       }
 
-      const altLimit = await opsStorage.interpolateHorizonAlt(req.params.site_id, azDeg);
-      res.json(wrapResponse({ az_deg: azDeg, alt_limit_deg: altLimit }));
+      // Return 360 interpolated points (0-359 degrees)
+      const horizonData = await opsStorage.getHorizonInterpolated(siteId);
+      res.json(wrapResponse(horizonData));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -107,7 +103,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== OBSTACLES =====
 
-  app.get("/astrodb/v1/ops/obstacles/:site_id", async (req, res) => {
+  router.get("/ops/obstacles/:site_id", async (req, res) => {
     try {
       const obstacles = await opsStorage.getObstacles(req.params.site_id);
       res.json(wrapResponse(obstacles));
@@ -118,23 +114,28 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== DEW RISK =====
 
-  app.get("/astrodb/v1/ops/dew/risk/:site_id", async (req, res) => {
+  router.get("/ops/dew/risk", async (req, res) => {
     try {
-      const { from, to, min_risk } = req.query;
+      const siteId = req.query.site_id as string;
+      const tsStr = req.query.ts as string;
 
-      const filters: any = { siteId: req.params.site_id };
-      if (from) filters.from = new Date(String(from));
-      if (to) filters.to = new Date(String(to));
-      if (min_risk) filters.minRisk = String(min_risk);
+      if (!siteId || !tsStr) {
+        return res.status(400).json({ error: "site_id and ts query parameters required" });
+      }
 
-      const events = await opsStorage.getDewRisk(filters);
-      res.json(wrapResponse(events));
+      const ts = new Date(tsStr);
+      if (isNaN(ts.getTime())) {
+        return res.status(400).json({ error: "Invalid ts format (expected ISO 8601)" });
+      }
+
+      const result = await opsStorage.calculateDewRisk(siteId, ts);
+      res.json(wrapResponse(result));
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/astrodb/v1/ops/dew/profiles", async (req, res) => {
+  router.get("/ops/dew/profiles", async (req, res) => {
     try {
       const { device_key } = req.query;
       const profiles = await opsStorage.getDewProfiles(device_key ? String(device_key) : undefined);
@@ -144,7 +145,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/dew/hints", async (req, res) => {
+  router.get("/ops/dew/hints", async (req, res) => {
     try {
       const { train_id } = req.query;
       const hints = await opsStorage.getDewControlHints(train_id ? String(train_id) : undefined);
@@ -156,7 +157,7 @@ export function registerOpsRoutes(app: Express) {
 
   // ===== LIGHT POLLUTION =====
 
-  app.get("/astrodb/v1/ops/lightpollution/tiles", async (req, res) => {
+  router.get("/ops/lightpollution/tiles", async (req, res) => {
     try {
       const { z, x_min, x_max, y_min, y_max, dataset } = req.query;
 
@@ -182,7 +183,7 @@ export function registerOpsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/ops/lightpollution/site/:site_id", async (req, res) => {
+  router.get("/ops/lightpollution/site/:site_id", async (req, res) => {
     try {
       const lpData = await opsStorage.getSiteLp(req.params.site_id);
       if (!lpData) {
@@ -193,4 +194,52 @@ export function registerOpsRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ===== LIGHT POLLUTION LOOKUP =====
+
+  router.get("/ops/lightpollution", async (req, res) => {
+    try {
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+
+      if (!latStr || !lonStr) {
+        return res.status(400).json({ error: "lat and lon query parameters required" });
+      }
+
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+
+      if (isNaN(lat) || isNaN(lon)) {
+        return res.status(400).json({ error: "Invalid lat/lon values" });
+      }
+
+      const result = await opsStorage.findNearestSiteLp(lat, lon);
+      if (!result) {
+        return res.status(404).json({ error: "No light pollution data found" });
+      }
+
+      res.json(wrapResponse(result));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== USER SITES =====
+
+  router.get("/user/sites", async (req, res) => {
+    try {
+      const sites = await opsStorage.getUserSites();
+      res.json(wrapResponse(sites));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerOpsRoutes(app: Express) {
+  const router = createOpsRouter();
+  app.use("/astrodb/v1", router);
 }

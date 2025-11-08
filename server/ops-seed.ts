@@ -11,11 +11,13 @@ import {
   lpTile,
   siteLp,
 } from "../shared/ops-schema";
+import { userSiteRegistry } from "../shared/planqa-schema";
 
 export async function seedOpsData() {
   console.log("Seeding Operations & Environment data...");
 
   // ===== SITES =====
+  // Create 3 demo sites
   const sites = await db
     .insert(site)
     .values([
@@ -40,49 +42,72 @@ export async function seedOpsData() {
         elevM: 1742,
         tz: "America/Los_Angeles",
       },
-      {
-        name: "Backyard Observatory - Denver",
-        lat: 39.7392,
-        lon: -104.9903,
-        elevM: 1609,
-        tz: "America/Denver",
-      },
     ])
     .returning();
 
   console.log(`✓ Created ${sites.length} sites`);
 
+  // ===== USER SITE REGISTRY =====
+  // Seed planqa.site_profile with the same 3 sites
+  const userSites = await db
+    .insert(userSiteRegistry)
+    .values([
+      {
+        name: "Mauna Kea Observatory",
+        lat: 19.8207,
+        lon: -155.4681,
+        elevM: 4205,
+        tz: "Pacific/Honolulu",
+      },
+      {
+        name: "La Palma Observatory",
+        lat: 28.7569,
+        lon: -17.8856,
+        elevM: 2396,
+        tz: "Atlantic/Canary",
+      },
+      {
+        name: "Mount Wilson Observatory",
+        lat: 34.2242,
+        lon: -118.0574,
+        elevM: 1742,
+        tz: "America/Los_Angeles",
+      },
+    ])
+    .returning();
+
+  console.log(`✓ Created ${userSites.length} user site registry entries`);
+
   // ===== WEATHER/METEO =====
+  // Generate 24 hours of hourly meteo for one site only
   const now = new Date();
   const meteoData = [];
+  const meteoSite = sites[0]; // Use first site
   
-  for (const s of sites.slice(0, 2)) {
-    // Generate 24 hours of forecast for first 2 sites
-    for (let h = 0; h < 24; h++) {
-      const ts = new Date(now.getTime() + h * 3600000);
-      meteoData.push({
-        siteId: s.id,
-        ts,
-        cloudPct: Math.random() * 40,
-        transparencyIdx: 0.7 + Math.random() * 0.3,
-        seeingArcsec: 1.2 + Math.random() * 1.5,
-        windMps: Math.random() * 8,
-        gustMps: Math.random() * 12,
-        tempC: 10 + Math.random() * 10,
-        dewpointC: 5 + Math.random() * 8,
-        rhPct: 30 + Math.random() * 40,
-        precipMm: Math.random() > 0.9 ? Math.random() * 2 : 0,
-        pressureHpa: 1010 + Math.random() * 20,
-        moonIllum: 0.35,
-        moonAltDeg: -15 + h * 2,
-        source: "simulated",
-        modelRun: now,
-      });
-    }
+  for (let h = 0; h < 24; h++) {
+    const ts = new Date(now.getTime() + h * 3600000);
+    meteoData.push({
+      siteId: meteoSite.id,
+      ts,
+      cloudPct: Math.random() * 40,
+      transparencyIdx: 0.7 + Math.random() * 0.3,
+      seeingArcsec: 1.2 + Math.random() * 1.5,
+      windMps: Math.random() * 8,
+      gustMps: Math.random() * 12,
+      tempC: 10 + Math.random() * 10,
+      dewpointC: 5 + Math.random() * 8,
+      rhPct: 30 + Math.random() * 40,
+      precipMm: Math.random() > 0.9 ? Math.random() * 2 : 0,
+      pressureHpa: 1010 + Math.random() * 20,
+      moonIllum: 0.35,
+      moonAltDeg: -15 + h * 2,
+      source: "simulated",
+      modelRun: now,
+    });
   }
 
   await db.insert(meteo).values(meteoData);
-  console.log(`✓ Created ${meteoData.length} meteo forecasts`);
+  console.log(`✓ Created ${meteoData.length} meteo forecasts (24h for one site)`);
 
   // ===== HORIZON =====
   const horizonPoints = [];
@@ -244,30 +269,75 @@ export async function seedOpsData() {
   console.log(`✓ Created ${lpTiles.length} light pollution tiles`);
 
   // ===== SITE LP =====
-  const siteLpData = await db
-    .insert(siteLp)
+  // Create additional sites for LP data (7 more to reach 10 total LP points)
+  const additionalSites = await db
+    .insert(site)
     .values([
       {
-        siteId: sites[0].id, // Mauna Kea
-        mpsasEst: 21.9,
-        method: "interpolated_tiles",
+        name: "Kitt Peak Observatory",
+        lat: 31.9583,
+        lon: -111.5967,
+        elevM: 2096,
+        tz: "America/Phoenix",
       },
       {
-        siteId: sites[1].id, // La Palma
-        mpsasEst: 21.5,
-        method: "interpolated_tiles",
+        name: "Cerro Paranal",
+        lat: -24.6272,
+        lon: -70.4042,
+        elevM: 2635,
+        tz: "America/Santiago",
       },
       {
-        siteId: sites[2].id, // Mount Wilson
-        mpsasEst: 20.2,
-        method: "interpolated_tiles",
+        name: "Siding Spring Observatory",
+        lat: -31.2728,
+        lon: 149.0661,
+        elevM: 1165,
+        tz: "Australia/Sydney",
       },
       {
-        siteId: sites[3].id, // Denver backyard
-        mpsasEst: 19.1,
-        method: "interpolated_tiles",
+        name: "Palomar Observatory",
+        lat: 33.3564,
+        lon: -116.8647,
+        elevM: 1712,
+        tz: "America/Los_Angeles",
+      },
+      {
+        name: "Lick Observatory",
+        lat: 37.3414,
+        lon: -121.6431,
+        elevM: 1283,
+        tz: "America/Los_Angeles",
+      },
+      {
+        name: "McDonald Observatory",
+        lat: 30.6714,
+        lon: -104.0214,
+        elevM: 2070,
+        tz: "America/Chicago",
+      },
+      {
+        name: "Apache Point Observatory",
+        lat: 32.7803,
+        lon: -105.8203,
+        elevM: 2788,
+        tz: "America/Denver",
       },
     ])
+    .returning();
+
+  // Create 10 demo LP points (3 from main sites + 7 from additional sites)
+  const allSitesForLp = [...sites, ...additionalSites];
+  const siteLpData = await db
+    .insert(siteLp)
+    .values(
+      allSitesForLp.slice(0, 10).map((s, idx) => ({
+        siteId: s.id,
+        mpsasEst: idx < 3 
+          ? [21.9, 21.5, 20.2][idx] // Use fixed values for first 3
+          : 18.5 + Math.random() * 3.5, // Random between 18.5-22.0 for others
+        method: "interpolated_tiles",
+      }))
+    )
     .returning();
 
   console.log(`✓ Created ${siteLpData.length} site light pollution estimates`);

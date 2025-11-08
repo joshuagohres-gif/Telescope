@@ -17,6 +17,9 @@ import {
   type Feature,
   type Hop,
 } from "../shared/targets-schema";
+import { catalogObject, satellite, tle } from "../shared/astrodb-schema";
+import { hourlyAltAz, peakAltitude } from "../lib/astro/altaz";
+import { findVisiblePasses, type TLE as TLEType } from "../lib/sat/propagate";
 
 // ===== TARGETING & ALERTS STORAGE =====
 
@@ -225,6 +228,159 @@ export class TargetsStorage {
     );
 
     return enriched;
+  }
+
+  async getFeaturesNear(
+    body: string,
+    lat: number,
+    lon: number,
+    radiusKm: number
+  ): Promise<Feature[]> {
+    // Use haversine formula to find features within radius
+    const features = await this.db
+      .select()
+      .from(feature)
+      .where(eq(feature.body, body.toLowerCase() as any));
+
+    // Filter by distance
+    const R = 6371; // Earth radius in km
+    const nearby = features.filter((f) => {
+      if (f.lat === null || f.lon === null) return false;
+      
+      const dLat = ((f.lat - lat) * Math.PI) / 180;
+      const dLon = ((f.lon - lon) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat * Math.PI) / 180) *
+          Math.cos((f.lat * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      
+      return distance <= radiusKm;
+    });
+
+    return nearby;
+  }
+
+  // ===== SHOWPIECES =====
+
+  async getShowpiecesTonight(
+    lat: number,
+    lon: number,
+    from: Date,
+    to: Date,
+    stepMinutes: number = 60
+  ): Promise<Array<{
+    name: string;
+    class: string;
+    ra: number;
+    dec: number;
+    mag: number;
+    hourly: Array<{ time: Date; alt: number; az: number }>;
+    peak_alt_deg: number;
+  }>> {
+    // Get all showpiece objects (bright objects)
+    const objects = await this.db
+      .select()
+      .from(catalogObject)
+      .where(
+        and(
+          lte(catalogObject.mag, 10.0), // Bright objects only
+          isNull(catalogObject.mag) === false
+        )
+      )
+      .limit(100);
+
+    const results = [];
+
+    for (const obj of objects) {
+      const ra = parseFloat(obj.raJ2000Deg);
+      const dec = parseFloat(obj.decJ2000Deg);
+      
+      if (isNaN(ra) || isNaN(dec)) continue;
+
+      const hourly = hourlyAltAz(ra, dec, lat, lon, from, to, stepMinutes);
+      const { peakAlt } = peakAltitude(ra, dec, lat, lon, from, to);
+
+      // Only include objects that rise above horizon
+      if (peakAlt > 0) {
+        results.push({
+          name: obj.primaryName,
+          class: obj.class,
+          ra,
+          dec,
+          mag: obj.mag || 99,
+          hourly,
+          peak_alt_deg: peakAlt,
+        });
+      }
+    }
+
+    // Sort by peak altitude (descending)
+    results.sort((a, b) => b.peak_alt_deg - a.peak_alt_deg);
+
+    return results;
+  }
+
+  // ===== SATELLITE PASSES =====
+
+  async getSatellitePasses(
+    noradId: number,
+    lat: number,
+    lon: number,
+    altM: number,
+    from: Date,
+    to: Date
+  ): Promise<Array<{
+    start: Date;
+    peak: Date;
+    end: Date;
+    max_el_deg: number;
+    az_start: number;
+    az_peak: number;
+  }>> {
+    // Get satellite record
+    const sat = await this.db
+      .select()
+      .from(satellite)
+      .where(eq(satellite.noradId, noradId))
+      .limit(1);
+
+    if (sat.length === 0) {
+      throw new Error(`Satellite with NORAD ID ${noradId} not found`);
+    }
+
+    // Get latest TLE
+    const tles = await this.db
+      .select()
+      .from(tle)
+      .where(eq(tle.noradId, noradId))
+      .orderBy(desc(tle.epoch))
+      .limit(1);
+
+    if (tles.length === 0) {
+      throw new Error(`No TLE data found for satellite ${noradId}`);
+    }
+
+    const tleData: TLEType = {
+      line1: tles[0].line1,
+      line2: tles[0].line2,
+      epoch: tles[0].epoch,
+    };
+
+    const observer = { lat, lon, alt: altM };
+    const passes = findVisiblePasses(tleData, observer, from, to);
+
+    return passes.map((p) => ({
+      start: p.start,
+      peak: p.peak,
+      end: p.end,
+      max_el_deg: p.maxElDeg,
+      az_start: p.azStart,
+      az_peak: p.azPeak,
+    }));
   }
 
   // ===== STAR HOPS =====

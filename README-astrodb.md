@@ -1,13 +1,33 @@
 # Astronomical Knowledge Base (AstroDB)
 
-A comprehensive read-only API providing access to four astronomical data domains: equipment catalogs, celestial objects, satellites, and astronomical events.
+A comprehensive read-only API providing access to multiple astronomical data domains organized into feature packs. Each pack can be enabled/disabled independently via environment variables.
 
-## Features
+## Feature Packs
 
+### Core Knowledge Base (ASTRO_KB_ENABLED)
 - **Equipment Database**: 2,000+ astronomy devices with detailed specifications
 - **Top 500 Night-Sky Objects**: Curated catalog of showpiece deep-sky objects
 - **Satellite Tracking**: ~50 brightest man-made objects with TLE data and pass predictions
 - **2025-2026 Events**: Major astronomical events with visibility information
+
+### Operations Pack (ASTRO_OPS_ENABLED)
+- **Horizon Upload & Read**: Site-specific horizon masks with interpolation
+- **Dew Risk Badge**: Real-time dew risk calculation from meteo data
+- **Light Pollution Lookup**: Nearest-site LP estimates by lat/lon
+- **User Site Registry**: Simple site profile management
+
+### Targets Pack (ASTRO_TARGETS_ENABLED)
+- **Tonight's Showpieces**: Objects visible tonight with hourly alt/az
+- **ISS Visible Passes**: 12-hour pass finder with visibility conditions
+- **Lunar Features Radius Search**: Find lunar features within radius
+
+### Calibration Pack (ASTRO_CALIB_ENABLED)
+- **Master Flats Finder**: Best matching master frame by distance scoring
+- **Autofocus Predictor**: First focus position by filter vs. temperature
+
+### Plan & QA Pack (ASTRO_PLANQA_ENABLED)
+- **Smart Exposure Recipe v0**: Rule-based exposure recommendations
+- **Session QA Summary**: Quality metrics rollup from per-frame submetrics
 
 ## Architecture
 
@@ -41,9 +61,13 @@ A comprehensive read-only API providing access to four astronomical data domains
 
 ### Quick Start
 
-1. **Enable the feature**:
+1. **Enable desired feature packs**:
    ```bash
-   export ASTRO_KB_ENABLED=true
+   export ASTRO_KB_ENABLED=true      # Core knowledge base
+   export ASTRO_OPS_ENABLED=true     # Operations pack
+   export ASTRO_TARGETS_ENABLED=true   # Targets pack
+   export ASTRO_CALIB_ENABLED=true   # Calibration pack
+   export ASTRO_PLANQA_ENABLED=true  # Plan & QA pack
    ```
 
 2. **Start all services**:
@@ -56,18 +80,35 @@ A comprehensive read-only API providing access to four astronomical data domains
    npm run db:push
    ```
 
-4. **Seed the database**:
+4. **Seed the database** (for enabled packs):
    ```bash
-   npm run astrodb:seed
+   npm run astrodb:seed      # Core KB
+   npm run ops:seed         # Operations pack
+   npm run targets:seed     # Targets pack (if using seed scripts)
+   npm run calib:seed       # Calibration pack (if using seed scripts)
+   npm run planqa:seed      # Plan & QA pack (if using seed scripts)
    ```
 
 5. **Access the API**:
-   - Health check: http://localhost:8080/astrodb/v1/health
-   - API docs: http://localhost:8080/docs
+   - Health check: http://localhost:5000/astrodb/v1/health
+   - API docs (JSON): http://localhost:5000/astrodb/v1/docs
+   - API docs (HTML): http://localhost:5000/astrodb/docs.html
+
+## Feature Flags
+
+Each feature pack is controlled by an environment variable:
+
+- `ASTRO_KB_ENABLED=true` - Core knowledge base (equipment, catalog, satellites, events)
+- `ASTRO_OPS_ENABLED=true` - Operations pack (horizon, dew risk, light pollution, sites)
+- `ASTRO_TARGETS_ENABLED=true` - Targets pack (showpieces, passes, features)
+- `ASTRO_CALIB_ENABLED=true` - Calibration pack (master frames, focus prediction)
+- `ASTRO_PLANQA_ENABLED=true` - Plan & QA pack (recipes, QA summaries)
+
+**Note:** Only enabled packs will have their routes mounted. Disabled packs return 404.
 
 ## API Reference
 
-All endpoints are mounted under `/astrodb/v1` and require the `ASTRO_KB_ENABLED=true` environment variable.
+All endpoints are mounted under `/astrodb/v1`. Core KB endpoints require `ASTRO_KB_ENABLED=true`. Pack-specific endpoints require their respective flags.
 
 ### Common Response Format
 
@@ -431,6 +472,24 @@ GET /astrodb/v1/health
 ```
 
 Returns service status and feature flag state.
+
+### API Documentation
+
+```bash
+GET /astrodb/v1/docs
+```
+
+Returns self-describing documentation with:
+- Enabled/disabled feature pack status
+- Example curl commands for each enabled pack
+- API version and generation timestamp
+
+**HTML Documentation:**
+```bash
+GET /astrodb/docs.html
+```
+
+Interactive HTML page showing all enabled endpoints with example curls.
 
 ## Testing
 

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { targetsStorage } from "./targets-storage";
 
 // Feature flag middleware
@@ -22,12 +23,15 @@ function wrapResponse(data: any, extra?: any) {
   };
 }
 
-export function registerTargetsRoutes(app: Express) {
-  app.use("/astrodb/v1/targets", checkTargetsFeatureFlag);
+export function createTargetsRouter(): express.Router {
+  const router = express.Router();
+  
+  // Apply feature flag middleware
+  router.use(checkTargetsFeatureFlag);
 
   // ===== TRANSIENTS =====
 
-  app.get("/astrodb/v1/targets/transients", async (req, res) => {
+  router.get("/targets/transients", async (req, res) => {
     try {
       const { type, name, min_mag, max_mag, since, limit } = req.query;
 
@@ -46,7 +50,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/transients/:id", async (req, res) => {
+  router.get("/targets/transients/:id", async (req, res) => {
     try {
       const transient = await targetsStorage.getTransientById(parseInt(req.params.id));
       if (!transient) {
@@ -60,7 +64,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== NOTICES =====
 
-  app.get("/astrodb/v1/targets/notices", async (req, res) => {
+  router.get("/targets/notices", async (req, res) => {
     try {
       const { transient_id, source, since, limit } = req.query;
 
@@ -79,7 +83,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== MINOR PLANETS =====
 
-  app.get("/astrodb/v1/targets/minorplanets", async (req, res) => {
+  router.get("/targets/minorplanets", async (req, res) => {
     try {
       const { designation, name, body_type, limit } = req.query;
 
@@ -96,7 +100,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id", async (req, res) => {
+  router.get("/targets/minorplanets/:id", async (req, res) => {
     try {
       const body = await targetsStorage.getMpBodyById(parseInt(req.params.id));
       if (!body) {
@@ -108,7 +112,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id/ephemeris", async (req, res) => {
+  router.get("/targets/minorplanets/:id/ephemeris", async (req, res) => {
     try {
       const { from, to } = req.query;
 
@@ -125,7 +129,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/minorplanets/:id/orbit", async (req, res) => {
+  router.get("/targets/minorplanets/:id/orbit", async (req, res) => {
     try {
       const elements = await targetsStorage.getOrbitElements(parseInt(req.params.id));
       res.json(wrapResponse(elements));
@@ -136,10 +140,31 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== FEATURES =====
 
-  app.get("/astrodb/v1/targets/features", async (req, res) => {
+  router.get("/targets/features", async (req, res) => {
     try {
-      const { body, feature_type, name, limit } = req.query;
+      const { body, feature_type, name, limit, near, radius_km } = req.query;
 
+      // Radius search
+      if (near && radius_km) {
+        const nearParts = String(near).split(",");
+        if (nearParts.length !== 2) {
+          return res.status(400).json({ error: "near parameter must be 'lat,lon'" });
+        }
+        const lat = parseFloat(nearParts[0]);
+        const lon = parseFloat(nearParts[1]);
+        const radius = parseFloat(String(radius_km));
+
+        if (isNaN(lat) || isNaN(lon) || isNaN(radius)) {
+          return res.status(400).json({ error: "Invalid lat, lon, or radius_km values" });
+        }
+
+        const bodyFilter = body ? String(body) : "Moon";
+        const features = await targetsStorage.getFeaturesNear(bodyFilter, lat, lon, radius);
+        res.json(wrapResponse(features));
+        return;
+      }
+
+      // Regular filter search
       const filters: any = {};
       if (body) filters.body = String(body);
       if (feature_type) filters.featureType = String(feature_type);
@@ -155,7 +180,7 @@ export function registerTargetsRoutes(app: Express) {
 
   // ===== STAR HOPS =====
 
-  app.get("/astrodb/v1/targets/hops/:target_name", async (req, res) => {
+  router.get("/targets/hops/:target_name", async (req, res) => {
     try {
       const hops = await targetsStorage.getStarHops(req.params.target_name);
       if (hops.length === 0) {
@@ -167,7 +192,7 @@ export function registerTargetsRoutes(app: Express) {
     }
   });
 
-  app.get("/astrodb/v1/targets/hops", async (req, res) => {
+  router.get("/targets/hops", async (req, res) => {
     try {
       const { q, limit } = req.query;
       if (!q) {
@@ -183,4 +208,111 @@ export function registerTargetsRoutes(app: Express) {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ===== TONIGHT'S SHOWPIECES =====
+
+  router.get("/targets/tonight", async (req, res) => {
+    try {
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+      const fromStr = req.query.from as string;
+      const toStr = req.query.to as string;
+      const stepStr = req.query.step as string;
+
+      if (!latStr || !lonStr || !fromStr || !toStr) {
+        return res.status(400).json({
+          error: "Required parameters: lat, lon, from, to",
+        });
+      }
+
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      const from = new Date(fromStr);
+      const to = new Date(toStr);
+
+      if (isNaN(lat) || isNaN(lon) || isNaN(from.getTime()) || isNaN(to.getTime())) {
+        return res.status(400).json({ error: "Invalid parameter values" });
+      }
+
+      // Parse step (e.g., "60m" -> 60 minutes)
+      let stepMinutes = 60;
+      if (stepStr) {
+        const match = stepStr.match(/^(\d+)([mh])$/);
+        if (match) {
+          const value = parseInt(match[1]);
+          const unit = match[2];
+          stepMinutes = unit === "h" ? value * 60 : value;
+        }
+      }
+
+      const showpieces = await targetsStorage.getShowpiecesTonight(
+        lat,
+        lon,
+        from,
+        to,
+        stepMinutes
+      );
+
+      res.json(wrapResponse(showpieces));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== SATELLITE PASSES =====
+
+  router.get("/targets/passes", async (req, res) => {
+    try {
+      const noradIdStr = req.query.norad_id as string;
+      const latStr = req.query.lat as string;
+      const lonStr = req.query.lon as string;
+      const altMStr = req.query.alt_m as string;
+      const fromStr = req.query.from as string;
+      const toStr = req.query.to as string;
+
+      if (!noradIdStr || !latStr || !lonStr || !fromStr || !toStr) {
+        return res.status(400).json({
+          error: "Required parameters: norad_id, lat, lon, from, to",
+        });
+      }
+
+      const noradId = parseInt(noradIdStr);
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      const altM = altMStr ? parseFloat(altMStr) : 0;
+      const from = new Date(fromStr);
+      const to = new Date(toStr);
+
+      if (
+        isNaN(noradId) ||
+        isNaN(lat) ||
+        isNaN(lon) ||
+        isNaN(from.getTime()) ||
+        isNaN(to.getTime())
+      ) {
+        return res.status(400).json({ error: "Invalid parameter values" });
+      }
+
+      const passes = await targetsStorage.getSatellitePasses(
+        noradId,
+        lat,
+        lon,
+        altM,
+        from,
+        to
+      );
+
+      res.json(wrapResponse(passes));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  return router;
+}
+
+// Legacy export for backward compatibility
+export function registerTargetsRoutes(app: Express) {
+  const router = createTargetsRouter();
+  app.use("/astrodb/v1", router);
 }

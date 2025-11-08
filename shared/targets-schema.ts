@@ -139,9 +139,9 @@ export const feature = pgTable('targets_feature', {
   body: featureBodyEnum('body').notNull(),
   name: varchar('name', { length: 256 }).notNull(),
   featureType: featureTypeEnum('feature_type').notNull(),
-  lat: real('lat'),
-  lon: real('lon'),
-  diameter: real('diameter'),
+  lat: real('lat'), // Maps to lat_deg in API
+  lon: real('lon'), // Maps to lon_deg in API
+  diameter: real('diameter'), // Maps to diameter_km in API
   description: text('description'),
   observabilityNotes: text('observability_notes'),
   createdAt: timestamp('created_at').notNull().defaultNow(),

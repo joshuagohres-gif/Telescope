@@ -1,0 +1,32 @@
+[
+  {
+    "train_id": "123e4567-e89b-12d3-a456-426614174000",
+    "kind": "flat",
+    "filter": "L",
+    "sensor_temp_c": -10.0,
+    "gain": "0",
+    "exposure_s": 2.5,
+    "hash": "abc123def456",
+    "s3_url": "s3://calib/masters/flat_L_-10C_gain0_2.5s.fits"
+  },
+  {
+    "train_id": "123e4567-e89b-12d3-a456-426614174000",
+    "kind": "flat",
+    "filter": "L",
+    "sensor_temp_c": -15.0,
+    "gain": "0",
+    "exposure_s": 2.5,
+    "hash": "def456ghi789",
+    "s3_url": "s3://calib/masters/flat_L_-15C_gain0_2.5s.fits"
+  },
+  {
+    "train_id": "123e4567-e89b-12d3-a456-426614174000",
+    "kind": "flat",
+    "filter": "R",
+    "sensor_temp_c": -10.0,
+    "gain": "0",
+    "exposure_s": 3.0,
+    "hash": "ghi789jkl012",
+    "s3_url": "s3://calib/masters/flat_R_-10C_gain0_3.0s.fits"
+  }
+]
