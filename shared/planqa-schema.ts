@@ -13,6 +13,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";

@@ -19,8 +19,10 @@ import { createOpsRouter } from "./ops-routes";
 import { createCalibRouter } from "./calib-routes";
 import { createTargetsRouter } from "./targets-routes";
 import { createPlanqaRouter } from "./planqa-routes";
-import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled } from "./astrodb-api/config/flags";
+import { createSkymapRouter } from "./skymap-routes";
+import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled, isSkymapEnabled } from "./astrodb-api/config/flags";
 import { registerDocsRoute } from "./astrodb-api/docs";
+import cadGenerativeRoutes from "./cad-generative-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -201,7 +203,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Register Design KB routes (feature-flagged)
   registerDesignRoutes(app);
-  
+
+  // Register CAD Generative routes
+  app.use("/api/cad", cadGenerativeRoutes);
+
   // Conditionally mount pack routers based on feature flags
   const astrodbRouter = express.Router();
   
@@ -224,7 +229,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const planqaRouter = createPlanqaRouter();
     astrodbRouter.use(planqaRouter);
   }
-  
+
+  if (isSkymapEnabled()) {
+    const skymapRouter = createSkymapRouter();
+    astrodbRouter.use(skymapRouter);
+  }
+
   // Mount combined router
   app.use("/astrodb/v1", astrodbRouter);
   

@@ -145,8 +145,8 @@ export function StarBackdropView({ ra, dec, alt, az, enabled = true }: StarBackd
 
     // Use the final Alt/Az values (calculated or provided)
     if (finalAlt !== undefined && finalAz !== undefined) {
-      console.log(`[StarBackdropView] Calling pointAtAltAz with alt=${finalAlt}, az=${finalAz}`);
-      backdropRef.current.pointAtAltAz(finalAlt, finalAz);
+      console.log(`[StarBackdropView] Calling updateTarget with alt=${finalAlt}, az=${finalAz}`);
+      backdropRef.current.updateTarget(finalAlt, finalAz);
     }
   }, [ra, dec, alt, az, location, enabled]);
 

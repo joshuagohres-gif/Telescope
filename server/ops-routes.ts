@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import express from "express";
 import { opsStorage } from "./ops-storage";
+import { weatherIntegration } from "./weather-integration";
 
 // Feature flag middleware
 function checkOpsFeatureFlag(req: any, res: any, next: any) {
@@ -230,6 +231,46 @@ export function createOpsRouter(): express.Router {
     try {
       const sites = await opsStorage.getUserSites();
       res.json(wrapResponse(sites));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===== WEATHER DATA INTEGRATION =====
+
+  router.post("/ops/weather/update/:site_id", async (req, res) => {
+    try {
+      const siteId = req.params.site_id;
+      const site = await opsStorage.getSiteById(siteId);
+
+      if (!site) {
+        return res.status(404).json({ error: "Site not found" });
+      }
+
+      // Fetch weather data from external APIs
+      await weatherIntegration.fetchCombinedForecast(site.id, site.lat, site.lon);
+
+      res.json({
+        success: true,
+        message: `Weather forecast updated for site ${site.name}`,
+        site_id: siteId,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post("/ops/weather/update-all", async (req, res) => {
+    try {
+      // Run update in background (don't await)
+      weatherIntegration.updateAllSites().catch((error) => {
+        console.error("Background weather update failed:", error);
+      });
+
+      res.json({
+        success: true,
+        message: "Weather update job started for all sites",
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

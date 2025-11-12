@@ -1,6 +1,15 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CommandInput } from "@/components/telescope/command-input";
 import { TelescopeViewport } from "@/components/telescope/telescope-viewport";
 import { PositionControl } from "@/components/telescope/position-control";
@@ -14,22 +23,110 @@ import { CommandHistory } from "@/components/telescope/command-history";
 import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
 import { DeviceDiscovery } from "@/components/telescope/device-discovery";
-import { Telescope, Target, Camera, Focus, Settings, Film } from "lucide-react";
+import {
+  Telescope,
+  Target,
+  Camera,
+  Focus,
+  Settings,
+  Film,
+  MapPin,
+  Lightbulb,
+  Wrench,
+  ChevronDown,
+  Menu,
+  Globe,
+  Database,
+  Ruler
+} from "lucide-react";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("position");
+  const [location, navigate] = useLocation();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center gap-3 px-2 hover:bg-accent">
+                <Telescope className="w-6 h-6 text-primary" data-testid="icon-telescope-logo" />
+                <h1 className="text-xl font-semibold" data-testid="text-app-title">Telescope Control System</h1>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/operations");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Operations</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/planqa");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Lightbulb className="w-4 h-4" />
+                <span>Plan & QA</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/calibration");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Wrench className="w-4 h-4" />
+                <span>Calibration</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/skymap");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Community Sky Map</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/astrodb");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Database className="w-4 h-4" />
+                <span>AstroDB - Equipment & Catalog</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/design");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Ruler className="w-4 h-4" />
+                <span>Design Knowledge Base</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5">
+                <DeviceDiscovery />
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <div className="flex items-center gap-3">
-            <Telescope className="w-6 h-6 text-primary" data-testid="icon-telescope-logo" />
-            <h1 className="text-xl font-semibold" data-testid="text-app-title">Telescope Control System</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <DeviceDiscovery />
             <ConnectionToggle />
             <EmergencyControls />
           </div>
@@ -48,7 +145,7 @@ export default function Dashboard() {
           {/* Center Column: Viewport & Controls */}
           <div className="lg:col-span-6 flex flex-col gap-4">
             <TelescopeViewport />
-            
+
             <Card className="p-6" data-testid="card-control-panels">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-6 w-full">

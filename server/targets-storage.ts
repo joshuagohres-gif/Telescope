@@ -18,8 +18,8 @@ import {
   type Hop,
 } from "../shared/targets-schema";
 import { catalogObject, satellite, tle } from "../shared/astrodb-schema";
-import { hourlyAltAz, peakAltitude } from "../lib/astro/altaz";
-import { findVisiblePasses, type TLE as TLEType } from "../lib/sat/propagate";
+import { hourlyAltAz, peakAltitude } from "./lib/astro/altaz";
+import { findVisiblePasses, type TLE as TLEType } from "./lib/sat/propagate";
 
 // ===== TARGETING & ALERTS STORAGE =====
 

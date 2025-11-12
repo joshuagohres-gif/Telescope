@@ -4,12 +4,15 @@ import * as satellite from "satellite.js";
 // Satellite pass prediction service using SGP4 orbit propagation
 
 export interface SatellitePass {
-  riseTime: Date;
-  setTime: Date;
-  maxElevation: number;
-  maxElevationTime: Date;
-  duration: number; // seconds
-  visible: boolean; // whether in sunlight and above horizon during dark
+  riseTime: string;
+  riseAz: number;
+  maxTime: string;
+  maxAlt: number;
+  maxAz: number;
+  maxMag: number | null;
+  setTime: string;
+  setAz: number;
+  durationSec: number;
 }
 
 /**
@@ -141,8 +144,12 @@ export async function computeSatellitePasses(
     // Track state for pass detection
     let inPass = false;
     let passStartTime: Date | null = null;
+    let passStartAz = 0;
     let maxElevation = 0;
     let maxElevationTime: Date | null = null;
+    let maxElevationAz = 0;
+    let passEndTime: Date | null = null;
+    let passEndAz = 0;
     let wasIlluminated = false;
 
     // Sample satellite position at regular intervals
@@ -167,7 +174,8 @@ export async function computeSatellitePasses(
       const lookAngles = satellite.ecfToLookAngles(observerGd,
         satellite.eciToEcf(positionEci, gmst));
 
-      const elevationDeg = satellite.degreesLat(lookAngles.elevation);
+      const elevationDeg = lookAngles.elevation * (180 / Math.PI);
+      const azimuthDeg = lookAngles.azimuth * (180 / Math.PI);
       const isAboveHorizon = elevationDeg >= MIN_ELEVATION;
       const isIlluminated = isSatelliteIlluminated(positionEci, currentTime);
 
@@ -175,37 +183,59 @@ export async function computeSatellitePasses(
       if (!inPass && isAboveHorizon) {
         // Pass starting
         inPass = true;
-        passStartTime = currentTime;
+        passStartTime = new Date(currentTime);
+        passStartAz = azimuthDeg;
         maxElevation = elevationDeg;
-        maxElevationTime = currentTime;
+        maxElevationTime = new Date(currentTime);
+        maxElevationAz = azimuthDeg;
         wasIlluminated = isIlluminated;
       } else if (inPass && isAboveHorizon) {
         // Pass continuing - track max elevation
         if (elevationDeg > maxElevation) {
           maxElevation = elevationDeg;
-          maxElevationTime = currentTime;
+          maxElevationTime = new Date(currentTime);
+          maxElevationAz = azimuthDeg;
         }
         wasIlluminated = wasIlluminated || isIlluminated;
       } else if (inPass && !isAboveHorizon) {
         // Pass ending
-        if (passStartTime && maxElevationTime) {
-          const duration = (currentTime.getTime() - passStartTime.getTime()) / 1000;
+        passEndTime = new Date(currentTime);
+        passEndAz = azimuthDeg;
+
+        if (passStartTime && maxElevationTime && passEndTime) {
+          const durationSec = (passEndTime.getTime() - passStartTime.getTime()) / 1000;
+
+          // Estimate magnitude based on max elevation and illumination
+          // Brighter satellites at higher elevations: rough approximation
+          let maxMag: number | null = null;
+          if (wasIlluminated) {
+            // Typical range: -8 (very bright ISS) to +5 (faint)
+            // Higher elevation = brighter
+            maxMag = 2.0 - (maxElevation / 15); // Rough approximation
+          }
 
           passes.push({
-            riseTime: passStartTime,
-            setTime: currentTime,
-            maxElevation,
-            maxElevationTime,
-            duration,
-            visible: wasIlluminated && maxElevation > 10, // Visible if illuminated and good elevation
+            riseTime: passStartTime.toISOString(),
+            riseAz: passStartAz,
+            maxTime: maxElevationTime.toISOString(),
+            maxAlt: maxElevation,
+            maxAz: maxElevationAz,
+            maxMag,
+            setTime: passEndTime.toISOString(),
+            setAz: passEndAz,
+            durationSec,
           });
         }
 
         // Reset for next pass
         inPass = false;
         passStartTime = null;
+        passStartAz = 0;
         maxElevation = 0;
         maxElevationTime = null;
+        maxElevationAz = 0;
+        passEndTime = null;
+        passEndAz = 0;
         wasIlluminated = false;
       }
 
@@ -215,15 +245,24 @@ export async function computeSatellitePasses(
 
     // Handle case where pass extends beyond toDate
     if (inPass && passStartTime && maxElevationTime) {
-      const duration = (toDate.getTime() - passStartTime.getTime()) / 1000;
+      const durationSec = (toDate.getTime() - passStartTime.getTime()) / 1000;
+
+      // Estimate magnitude
+      let maxMag: number | null = null;
+      if (wasIlluminated) {
+        maxMag = 2.0 - (maxElevation / 15);
+      }
 
       passes.push({
-        riseTime: passStartTime,
-        setTime: toDate,
-        maxElevation,
-        maxElevationTime,
-        duration,
-        visible: wasIlluminated && maxElevation > 10,
+        riseTime: passStartTime.toISOString(),
+        riseAz: passStartAz,
+        maxTime: maxElevationTime.toISOString(),
+        maxAlt: maxElevation,
+        maxAz: maxElevationAz,
+        maxMag,
+        setTime: toDate.toISOString(),
+        setAz: maxElevationAz, // Use max az as approximation for incomplete pass
+        durationSec,
       });
     }
 

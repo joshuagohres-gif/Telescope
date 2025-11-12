@@ -7,12 +7,17 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, webSocketCon
 const db = drizzle(pool);
 
 const initialTargets: InsertCelestialTarget[] = [
-  // Planets
-  { name: "Mars", type: "planet", ra: 1.5, dec: 15.0, magnitude: -2.0, constellation: "Aries", description: "The Red Planet" },
-  { name: "Jupiter", type: "planet", ra: 3.2, dec: 17.5, magnitude: -2.5, constellation: "Taurus", description: "Gas giant with Great Red Spot" },
-  { name: "Saturn", type: "planet", ra: 14.5, dec: -12.0, magnitude: 0.5, constellation: "Virgo", description: "The Ringed Planet" },
-  { name: "Venus", type: "planet", ra: 22.0, dec: -10.0, magnitude: -4.0, constellation: "Aquarius", description: "Evening Star" },
-  
+  // Solar System Objects (positions calculated dynamically)
+  { name: "Moon", type: "moon", ra: 0, dec: 0, magnitude: -12.7, description: "Earth's natural satellite" },
+  { name: "Sun", type: "sun", ra: 0, dec: 0, magnitude: -26.7, description: "Our star" },
+  { name: "Mercury", type: "planet", ra: 0, dec: 0, magnitude: -0.5, description: "Closest planet to the Sun" },
+  { name: "Venus", type: "planet", ra: 0, dec: 0, magnitude: -4.0, description: "Evening/Morning Star" },
+  { name: "Mars", type: "planet", ra: 0, dec: 0, magnitude: -2.0, description: "The Red Planet" },
+  { name: "Jupiter", type: "planet", ra: 0, dec: 0, magnitude: -2.5, description: "Gas giant with Great Red Spot" },
+  { name: "Saturn", type: "planet", ra: 0, dec: 0, magnitude: 0.5, description: "The Ringed Planet" },
+  { name: "Uranus", type: "planet", ra: 0, dec: 0, magnitude: 5.5, description: "Ice giant tilted on its side" },
+  { name: "Neptune", type: "planet", ra: 0, dec: 0, magnitude: 7.8, description: "Most distant planet" },
+
   // Deep Sky Objects
   { name: "Andromeda Galaxy", type: "galaxy", ra: 0.71, dec: 41.27, magnitude: 3.4, constellation: "Andromeda", description: "M31, nearest major galaxy" },
   { name: "Orion Nebula", type: "nebula", ra: 5.59, dec: -5.39, magnitude: 4.0, constellation: "Orion", description: "M42, stellar nursery" },

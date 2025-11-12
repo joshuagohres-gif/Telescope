@@ -8,7 +8,7 @@ import { StarBackdropView } from "./star-backdrop-view";
 export function TelescopeViewport() {
   const { data: status } = useQuery<SystemStatus>({
     queryKey: ["/api/telescope/status"],
-    refetchInterval: 1000, // Refresh every second
+    refetchInterval: 200, // Refresh every 200ms for smoother tracking during slews
   });
 
   const telescope = status?.telescope;

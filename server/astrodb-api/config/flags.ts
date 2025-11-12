@@ -10,6 +10,7 @@ export interface FeatureFlags {
   targets: boolean;
   calib: boolean;
   planqa: boolean;
+  skymap: boolean;
 }
 
 /**
@@ -41,6 +42,13 @@ export function isPlanqaEnabled(): boolean {
 }
 
 /**
+ * Check if Community Sky Map is enabled
+ */
+export function isSkymapEnabled(): boolean {
+  return process.env.ASTRO_SKYMAP_ENABLED === "true";
+}
+
+/**
  * Get all feature flags
  */
 export function getAllFlags(): FeatureFlags {
@@ -49,6 +57,7 @@ export function getAllFlags(): FeatureFlags {
     targets: isTargetsEnabled(),
     calib: isCalibEnabled(),
     planqa: isPlanqaEnabled(),
+    skymap: isSkymapEnabled(),
   };
 }
 

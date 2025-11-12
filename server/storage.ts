@@ -1,5 +1,5 @@
-import { 
-  type Command, 
+import {
+  type Command,
   type InsertCommand,
   type CelestialTarget,
   type InsertCelestialTarget,
@@ -17,6 +17,7 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import { eq, desc } from "drizzle-orm";
 import ws from "ws";
+import { calculateSolarSystemPosition, isSolarSystemObject } from "./lib/astro/planets";
 
 neonConfig.webSocketConstructor = ws as any;
 
@@ -60,12 +61,17 @@ export class MemStorage implements IStorage {
   // Initialize with common celestial objects
   private initializeCelestialDatabase() {
     const targets: InsertCelestialTarget[] = [
-      // Planets
-      { name: "Mars", type: "planet", ra: 1.5, dec: 15.0, magnitude: -2.0, constellation: "Aries", description: "The Red Planet" },
-      { name: "Jupiter", type: "planet", ra: 3.2, dec: 17.5, magnitude: -2.5, constellation: "Taurus", description: "Gas giant with Great Red Spot" },
-      { name: "Saturn", type: "planet", ra: 14.5, dec: -12.0, magnitude: 0.5, constellation: "Virgo", description: "The Ringed Planet" },
-      { name: "Venus", type: "planet", ra: 22.0, dec: -10.0, magnitude: -4.0, constellation: "Aquarius", description: "Evening Star" },
-      
+      // Solar System Objects (positions calculated dynamically)
+      { name: "Moon", type: "moon", ra: 0, dec: 0, magnitude: -12.7, description: "Earth's natural satellite" },
+      { name: "Sun", type: "sun", ra: 0, dec: 0, magnitude: -26.7, description: "Our star" },
+      { name: "Mercury", type: "planet", ra: 0, dec: 0, magnitude: -0.5, description: "Closest planet to the Sun" },
+      { name: "Venus", type: "planet", ra: 0, dec: 0, magnitude: -4.0, description: "Evening/Morning Star" },
+      { name: "Mars", type: "planet", ra: 0, dec: 0, magnitude: -2.0, description: "The Red Planet" },
+      { name: "Jupiter", type: "planet", ra: 0, dec: 0, magnitude: -2.5, description: "Gas giant with Great Red Spot" },
+      { name: "Saturn", type: "planet", ra: 0, dec: 0, magnitude: 0.5, description: "The Ringed Planet" },
+      { name: "Uranus", type: "planet", ra: 0, dec: 0, magnitude: 5.5, description: "Ice giant tilted on its side" },
+      { name: "Neptune", type: "planet", ra: 0, dec: 0, magnitude: 7.8, description: "Most distant planet" },
+
       // Deep Sky Objects
       { name: "Andromeda Galaxy", type: "galaxy", ra: 0.71, dec: 41.27, magnitude: 3.4, constellation: "Andromeda", description: "M31, nearest major galaxy" },
       { name: "Orion Nebula", type: "nebula", ra: 5.59, dec: -5.39, magnitude: 4.0, constellation: "Orion", description: "M42, stellar nursery" },
@@ -139,6 +145,40 @@ export class MemStorage implements IStorage {
   }
 
   async getCelestialTargetByName(name: string): Promise<CelestialTarget | undefined> {
+    // Check if it's a solar system object (planet, Moon, or Sun) and calculate real-time position
+    if (isSolarSystemObject(name)) {
+      const position = calculateSolarSystemPosition(name);
+      if (position) {
+        console.log(`[Storage] Calculated position for ${name}: RA=${position.ra.toFixed(4)}h, Dec=${position.dec.toFixed(4)}°, Distance=${position.distance.toFixed(6)} AU`);
+
+        // Determine type and magnitude based on object name
+        const normalizedName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+        let type: string = "planet";
+        let magnitude = -2.0;
+
+        if (normalizedName === 'Moon') {
+          type = "moon";
+          magnitude = -12.7;
+        } else if (normalizedName === 'Sun') {
+          type = "sun";
+          magnitude = -26.7;
+        }
+
+        // Return a synthetic target with calculated position
+        return {
+          id: `solar-${normalizedName.toLowerCase()}`,
+          name: normalizedName,
+          type: type as any,
+          ra: position.ra,
+          dec: position.dec,
+          magnitude,
+          constellation: undefined,
+          description: `Real-time calculated position for ${normalizedName}`,
+        };
+      }
+    }
+
+    // Fall back to database lookup for non-solar-system objects or if calculation fails
     return Array.from(this.celestialTargets.values())
       .find(target => target.name.toLowerCase() === name.toLowerCase());
   }
@@ -299,6 +339,27 @@ export class DbStorage implements IStorage {
   }
 
   async getCelestialTargetByName(name: string): Promise<CelestialTarget | undefined> {
+    // Check if it's a planet and calculate real-time position
+    if (isPlanet(name)) {
+      const planetPos = calculatePlanetPosition(name);
+      if (planetPos) {
+        console.log(`[Storage] Calculated planet position for ${name}: RA=${planetPos.ra.toFixed(4)}h, Dec=${planetPos.dec.toFixed(4)}°`);
+
+        // Return a synthetic target with calculated position
+        return {
+          id: `planet-${name.toLowerCase()}`,
+          name,
+          type: "planet" as const,
+          ra: planetPos.ra,
+          dec: planetPos.dec,
+          magnitude: -2.0, // Approximate, planets vary
+          constellation: "Calculated", // Dynamically calculated
+          description: `Real-time calculated position for ${name}`,
+        };
+      }
+    }
+
+    // Fall back to database lookup for non-planets or if calculation fails
     const targets = await this.db
       .select()
       .from(celestialTargets)

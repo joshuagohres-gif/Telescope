@@ -1,20 +1,26 @@
-import type { 
-  TelescopeState, 
-  CameraState, 
-  FocuserState, 
+import type {
+  TelescopeState,
+  CameraState,
+  FocuserState,
   CalibrationData,
-  SystemStatus 
+  SystemStatus
 } from "@shared/schema";
+import { raDecToAltAz } from "../lib/astro/altaz";
 
 export class TelescopeSimulator {
   private telescopeState: TelescopeState;
   private cameraState: CameraState;
   private focuserState: FocuserState;
   private calibrationData: CalibrationData;
-  
+
   private slewInterval: NodeJS.Timeout | null = null;
   private exposureInterval: NodeJS.Timeout | null = null;
   private focusInterval: NodeJS.Timeout | null = null;
+  private trackingInterval: NodeJS.Timeout | null = null;
+
+  // Observer location (default: San Francisco area)
+  private observerLat: number = 37.7749;
+  private observerLon: number = -122.4194;
 
   constructor() {
     this.telescopeState = {
@@ -91,12 +97,28 @@ export class TelescopeSimulator {
 
     this.telescopeState.slewing = true;
     this.telescopeState.parked = false;
-    this.telescopeState.targetPosition = { ra, dec, alt: 45, az: 180 };
+
+    // Calculate target Alt/Az
+    const targetAltAz = raDecToAltAz(
+      ra * 15, // Convert RA hours to degrees
+      dec,
+      this.observerLat,
+      this.observerLon,
+      new Date()
+    );
+
+    this.telescopeState.targetPosition = {
+      ra,
+      dec,
+      alt: targetAltAz.alt,
+      az: targetAltAz.az
+    };
 
     // Simulate slew (3 seconds)
     this.slewInterval = setTimeout(() => {
       this.telescopeState.position.ra = ra;
       this.telescopeState.position.dec = dec;
+      this.updateAltAz(); // Update Alt/Az after slew
       this.telescopeState.slewing = false;
       this.slewInterval = null;
     }, 3000);
@@ -113,22 +135,19 @@ export class TelescopeSimulator {
     switch (direction) {
       case "north":
         this.telescopeState.position.dec = Math.min(90, this.telescopeState.position.dec + delta);
-        this.telescopeState.position.alt = Math.min(90, this.telescopeState.position.alt + delta);
         break;
       case "south":
         this.telescopeState.position.dec = Math.max(-90, this.telescopeState.position.dec - delta);
-        this.telescopeState.position.alt = Math.max(0, this.telescopeState.position.alt - delta);
         break;
       case "east":
         this.telescopeState.position.ra = (this.telescopeState.position.ra + delta) % 24;
-        this.telescopeState.position.az = (this.telescopeState.position.az + delta * 15) % 360;
         break;
       case "west":
         this.telescopeState.position.ra = (this.telescopeState.position.ra - delta + 24) % 24;
-        this.telescopeState.position.az = (this.telescopeState.position.az - delta * 15 + 360) % 360;
         break;
     }
 
+    this.updateAltAz(); // Recalculate Alt/Az after manual slew
     this.telescopeState.parked = false;
   }
 
@@ -142,11 +161,35 @@ export class TelescopeSimulator {
     if (target) {
       this.telescopeState.currentTarget = target;
     }
+
+    // Start tracking update loop
+    // When tracking, RA/Dec stay constant (telescope follows the celestial coordinates)
+    // Only Alt/Az changes as Earth rotates and the horizon moves
+    // Update every 100ms for smooth Alt/Az updates
+    const UPDATE_INTERVAL_MS = 100;
+
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+    }
+
+    this.trackingInterval = setInterval(() => {
+      if (this.telescopeState.tracking) {
+        // RA/Dec stay constant - telescope is tracking the same celestial coordinates
+        // Only update Alt/Az as Earth rotates
+        this.updateAltAz();
+      }
+    }, UPDATE_INTERVAL_MS);
   }
 
   stopTracking(): void {
     this.telescopeState.tracking = false;
     this.telescopeState.currentTarget = undefined;
+
+    // Stop tracking interval
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
+    }
   }
 
   park(): void {
@@ -279,6 +322,20 @@ export class TelescopeSimulator {
     this.calibrationData.lastCalibration = new Date().toISOString();
   }
 
+  private updateAltAz(): void {
+    // Calculate Alt/Az from current RA/Dec
+    const altAz = raDecToAltAz(
+      this.telescopeState.position.ra * 15, // Convert RA hours to degrees
+      this.telescopeState.position.dec,
+      this.observerLat,
+      this.observerLon,
+      new Date()
+    );
+
+    this.telescopeState.position.alt = altAz.alt;
+    this.telescopeState.position.az = altAz.az;
+  }
+
   private stopAllMotion(): void {
     if (this.slewInterval) {
       clearTimeout(this.slewInterval);
@@ -291,6 +348,10 @@ export class TelescopeSimulator {
     if (this.focusInterval) {
       clearTimeout(this.focusInterval);
       this.focusInterval = null;
+    }
+    if (this.trackingInterval) {
+      clearInterval(this.trackingInterval);
+      this.trackingInterval = null;
     }
 
     this.telescopeState.slewing = false;

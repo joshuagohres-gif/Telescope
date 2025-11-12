@@ -42,6 +42,7 @@ interface PlanetData {
   rates: ElementRates;
   color: [number, number, number]; // RGB
   apparentMagnitude: number; // Approximate visual magnitude
+  diameter: number; // Equatorial diameter in kilometers
 }
 
 const J2000 = 2451545.0; // Julian Date for J2000.0 epoch
@@ -57,6 +58,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: 0.00000037, e: 0.00001906, i: -0.00594749, L: 149472.67411175, longPeri: 0.16047689, longNode: -0.12534081 },
     color: [0.7, 0.7, 0.7],
     apparentMagnitude: -0.5,
+    diameter: 4880, // km
   },
   Venus: {
     name: 'Venus',
@@ -64,6 +66,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: 0.00000390, e: -0.00004107, i: -0.00078890, L: 58517.81538729, longPeri: 0.00268329, longNode: -0.27769418 },
     color: [0.9, 0.9, 0.7],
     apparentMagnitude: -4.0,
+    diameter: 12104, // km
   },
   Mars: {
     name: 'Mars',
@@ -71,6 +74,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: 0.00001847, e: 0.00007882, i: -0.00813131, L: 19140.30268499, longPeri: 0.44441088, longNode: -0.29257343 },
     color: [1.0, 0.5, 0.3],
     apparentMagnitude: -1.0,
+    diameter: 6779, // km
   },
   Jupiter: {
     name: 'Jupiter',
@@ -78,6 +82,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: -0.00011607, e: -0.00013253, i: -0.00183714, L: 3034.74612775, longPeri: 0.21252668, longNode: 0.20469106 },
     color: [0.9, 0.8, 0.6],
     apparentMagnitude: -2.5,
+    diameter: 139820, // km
   },
   Saturn: {
     name: 'Saturn',
@@ -85,6 +90,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: -0.00125060, e: -0.00050991, i: 0.00193609, L: 1222.49362201, longPeri: -0.41897216, longNode: -0.28867794 },
     color: [0.9, 0.85, 0.6],
     apparentMagnitude: 0.5,
+    diameter: 116460, // km (excluding rings)
   },
   Uranus: {
     name: 'Uranus',
@@ -92,6 +98,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: -0.00196176, e: -0.00004397, i: -0.00242939, L: 428.48202785, longPeri: 0.40805281, longNode: 0.04240589 },
     color: [0.6, 0.8, 0.9],
     apparentMagnitude: 5.5,
+    diameter: 50724, // km
   },
   Neptune: {
     name: 'Neptune',
@@ -99,6 +106,7 @@ export const PLANET_DATA: Record<string, PlanetData> = {
     rates: { a: 0.00026291, e: 0.00005105, i: 0.00035372, L: 218.45945325, longPeri: -0.32241464, longNode: -0.00508664 },
     color: [0.4, 0.5, 0.9],
     apparentMagnitude: 7.8,
+    diameter: 49244, // km
   },
 };
 
@@ -318,6 +326,7 @@ export function getAllPlanetPositions(time: Date): Array<{
   distance: number;
   color: [number, number, number];
   magnitude: number;
+  diameter: number;
 }> {
   const results = [];
 
@@ -331,6 +340,7 @@ export function getAllPlanetPositions(time: Date): Array<{
         distance: pos.distance,
         color: planet.color,
         magnitude: planet.apparentMagnitude,
+        diameter: planet.diameter,
       });
     }
   }

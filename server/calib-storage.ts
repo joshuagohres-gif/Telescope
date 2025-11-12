@@ -22,7 +22,7 @@ import {
   type Filter,
   type Sensor,
 } from "../shared/calib-schema";
-import { findBestMasterFrame } from "../lib/calib/scoreMaster";
+import { findBestMasterFrame } from "./lib/calib/scoreMaster";
 
 // ===== CALIBRATION STORAGE =====
 

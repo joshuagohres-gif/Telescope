@@ -1,6 +1,10 @@
 import type { Express, Request, Response } from "express";
-import { astroDbStorage } from "./astrodb-storage";
+import { storage } from "./astrodb-storage";
+import { mockAstroDbStorage } from "./astrodb-storage-mock";
 import { computeSatellitePasses } from "./services/satellite-passes";
+
+// Use mock storage if no database URL is configured
+const storage = process.env.DATABASE_URL ? storage : mockAstroDbStorage;
 
 // Feature flag check middleware
 const checkFeatureFlag = (req: Request, res: Response, next: any) => {
@@ -35,7 +39,7 @@ export function registerAstroDbRoutes(app: Express) {
     try {
       const { category, interface: iface, manufacturer, q, page, pageSize } = req.query;
       
-      const result = await astroDbStorage.getDevices({
+      const result = await storage.getDevices({
         category: category as string,
         interface: iface as string,
         manufacturer: manufacturer as string,
@@ -62,13 +66,13 @@ export function registerAstroDbRoutes(app: Express) {
   app.get("/astrodb/v1/equipment/devices/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const device = await astroDbStorage.getDeviceById(id);
+      const device = await storage.getDeviceById(id);
       
       if (!device) {
         return res.status(404).json({ error: "Device not found" });
       }
 
-      const sources = await astroDbStorage.getSourcesForEntity("device", id);
+      const sources = await storage.getSourcesForEntity("device", id);
       res.json(wrapResponse(device, sources));
     } catch (error: any) {
       console.error("Error fetching device:", error);
@@ -92,7 +96,7 @@ export function registerAstroDbRoutes(app: Express) {
         pageSize 
       } = req.query;
 
-      const result = await astroDbStorage.getCatalogObjects({
+      const result = await storage.getCatalogObjects({
         class: objClass as string,
         constellation: constellation as string,
         magLte: mag_lte ? parseFloat(mag_lte as string) : undefined,
@@ -122,13 +126,13 @@ export function registerAstroDbRoutes(app: Express) {
   app.get("/astrodb/v1/catalog/objects/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const object = await astroDbStorage.getCatalogObjectById(id);
+      const object = await storage.getCatalogObjectById(id);
       
       if (!object) {
         return res.status(404).json({ error: "Object not found" });
       }
 
-      const sources = await astroDbStorage.getSourcesForEntity("object", id);
+      const sources = await storage.getSourcesForEntity("object", id);
       res.json(wrapResponse(object, sources));
     } catch (error: any) {
       console.error("Error fetching catalog object:", error);
@@ -142,7 +146,7 @@ export function registerAstroDbRoutes(app: Express) {
     try {
       const { bright_first, page, pageSize } = req.query;
       
-      const result = await astroDbStorage.getSatellites({
+      const result = await storage.getSatellites({
         brightFirst: bright_first === "true",
         page: page ? parseInt(page as string) : undefined,
         pageSize: pageSize ? parseInt(pageSize as string) : undefined,
@@ -166,13 +170,13 @@ export function registerAstroDbRoutes(app: Express) {
   app.get("/astrodb/v1/satobs/satellites/:noradId", async (req, res) => {
     try {
       const noradId = parseInt(req.params.noradId);
-      const satellite = await astroDbStorage.getSatelliteByNoradId(noradId);
+      const satellite = await storage.getSatelliteByNoradId(noradId);
       
       if (!satellite) {
         return res.status(404).json({ error: "Satellite not found" });
       }
 
-      const sources = await astroDbStorage.getSourcesForEntity("satellite", noradId);
+      const sources = await storage.getSourcesForEntity("satellite", noradId);
       res.json(wrapResponse(satellite, sources));
     } catch (error: any) {
       console.error("Error fetching satellite:", error);
@@ -198,7 +202,7 @@ export function registerAstroDbRoutes(app: Express) {
       const toDate = new Date(to as string);
 
       // Get satellite with latest TLE
-      const satellite = await astroDbStorage.getSatelliteByNoradId(noradId);
+      const satellite = await storage.getSatelliteByNoradId(noradId);
       if (!satellite || !satellite.latestTLE) {
         return res.status(404).json({ error: "Satellite or TLE not found" });
       }
@@ -234,7 +238,7 @@ export function registerAstroDbRoutes(app: Express) {
     try {
       const { type, from, to, country, continent, page, pageSize } = req.query;
       
-      const result = await astroDbStorage.getEvents({
+      const result = await storage.getEvents({
         type: type as string,
         from: from ? new Date(from as string) : undefined,
         to: to ? new Date(to as string) : undefined,
@@ -262,13 +266,13 @@ export function registerAstroDbRoutes(app: Express) {
   app.get("/astrodb/v1/events/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const event = await astroDbStorage.getEventById(id);
+      const event = await storage.getEventById(id);
       
       if (!event) {
         return res.status(404).json({ error: "Event not found" });
       }
 
-      const sources = await astroDbStorage.getSourcesForEntity("event", id);
+      const sources = await storage.getSourcesForEntity("event", id);
       res.json(wrapResponse(event, sources));
     } catch (error: any) {
       console.error("Error fetching event:", error);
@@ -281,7 +285,7 @@ export function registerAstroDbRoutes(app: Express) {
   app.get("/astrodb/v1/admin/import-runs", async (req, res) => {
     try {
       const { domain } = req.query;
-      const runs = await astroDbStorage.getImportRuns(domain as string);
+      const runs = await storage.getImportRuns(domain as string);
       res.json(wrapResponse(runs));
     } catch (error: any) {
       console.error("Error fetching import runs:", error);

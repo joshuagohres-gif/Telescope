@@ -77,7 +77,7 @@ export interface PlanetLayerConfig {
   time?: Date;
 
   /**
-   * Planet size scale factor
+   * Planet size scale factor (multiplier for true angular sizes)
    */
   planetScale?: number;
 
@@ -85,6 +85,11 @@ export interface PlanetLayerConfig {
    * Apply atmospheric refraction
    */
   applyRefraction?: boolean;
+
+  /**
+   * Field of view in degrees (for angular size to pixel conversion)
+   */
+  fov?: number;
 }
 
 interface ProcessedPlanet {
@@ -118,6 +123,7 @@ export class PlanetLayer implements RenderLayer {
       time: config.time ?? new Date(),
       planetScale: config.planetScale ?? 1.0,
       applyRefraction: config.applyRefraction ?? true,
+      fov: config.fov ?? 60,
     };
 
     this.initialize();
@@ -247,12 +253,16 @@ export class PlanetLayer implements RenderLayer {
 
   private computePlanetPositions(): void {
     const { gl } = this;
-    const { latitude, longitude, time, applyRefraction, planetScale } = this.config;
+    const { latitude, longitude, time, applyRefraction, planetScale, fov } = this.config;
 
     // Get all planet positions for current time
     const planets = getAllPlanetPositions(time);
 
     const processedPlanets: ProcessedPlanet[] = [];
+
+    // Constants for angular size calculation
+    const AU_TO_KM = 149597870.7; // 1 AU in kilometers
+    const canvasHeight = gl.canvas.height;
 
     for (const planet of planets) {
       // Convert planet's RA/Dec to Alt/Az and get 3D direction vector
@@ -268,24 +278,39 @@ export class PlanetLayer implements RenderLayer {
       // Skip planets below horizon
       if (!direction) continue;
 
-      // Calculate size based on magnitude (brighter = larger)
-      // Planets are much larger than stars
-      const brightness = Math.pow(2.512, -planet.magnitude);
-      const size = planetScale * brightness * 15.0; // Larger base size than stars
+      // Calculate TRUE angular size based on physical diameter and distance
+      // Angular diameter (radians) = 2 * arctan(diameter / (2 * distance))
+      const distanceKm = planet.distance * AU_TO_KM;
+      const angularDiameterRad = 2 * Math.atan(planet.diameter / (2 * distanceKm));
+
+      // Convert angular size to pixel size based on FOV
+      // Pixels per radian = canvas height / FOV in radians
+      const fovRad = (fov * Math.PI) / 180;
+      const pixelsPerRadian = canvasHeight / fovRad;
+      const angularSizePixels = angularDiameterRad * pixelsPerRadian * planetScale;
+
+      // Clamp to reasonable range (minimum 4 pixels so tiny planets are visible, max 100)
+      const size = Math.max(4.0, Math.min(100.0, angularSizePixels));
 
       processedPlanets.push({
         name: planet.name,
         position: [direction.x, direction.y, direction.z],
         color: planet.color,
-        size: Math.max(8.0, Math.min(30.0, size)), // Clamp between 8-30 pixels
+        size,
       });
     }
 
     this.planetCount = processedPlanets.length;
 
     console.log(`[PlanetLayer] Computed ${this.planetCount} visible planets for ${time.toISOString()}`);
-    processedPlanets.forEach(p => {
-      console.log(`  ${p.name}: pos=[${p.position[0].toFixed(3)}, ${p.position[1].toFixed(3)}, ${p.position[2].toFixed(3)}], size=${p.size.toFixed(1)}px`);
+    processedPlanets.forEach((p, i) => {
+      const planet = planets.find(pl => pl.name === p.name);
+      if (planet) {
+        const distanceKm = planet.distance * 149597870.7;
+        const angularDiameterRad = 2 * Math.atan(planet.diameter / (2 * distanceKm));
+        const angularDiameterArcSec = (angularDiameterRad * 180 * 3600) / Math.PI;
+        console.log(`  ${p.name}: pos=[${p.position[0].toFixed(3)}, ${p.position[1].toFixed(3)}, ${p.position[2].toFixed(3)}], size=${p.size.toFixed(1)}px (${angularDiameterArcSec.toFixed(2)}" angular)`);
+      }
     });
 
     // Create vertex data

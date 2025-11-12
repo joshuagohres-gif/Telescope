@@ -7,6 +7,8 @@ import { SceneHost } from './renderer/SceneHost';
 import { SkyDome } from './renderer/SkyDome';
 import { StarLayer } from './renderer/StarLayer';
 import { PlanetLayer } from './renderer/PlanetLayer';
+import { MoonLayer } from './renderer/MoonLayer';
+import { SunLayer } from './renderer/SunLayer';
 
 export interface StarBackdropConfig {
   /**
@@ -48,6 +50,11 @@ export interface StarBackdropConfig {
    * Star point size scale
    */
   starScale?: number;
+
+  /**
+   * Planet size scale (multiplier for true angular sizes, default 1.0)
+   */
+  planetScale?: number;
 
   /**
    * Apply atmospheric refraction
@@ -103,6 +110,8 @@ export class StarBackdrop {
   private skyDome: SkyDome;
   private starLayer: StarLayer;
   private planetLayer: PlanetLayer;
+  private moonLayer: MoonLayer;
+  private sunLayer: SunLayer;
 
   private config: Required<Omit<StarBackdropConfig, 'container' | 'width' | 'height'>>;
   private autoUpdateInterval: number | null = null;
@@ -188,11 +197,25 @@ export class StarBackdrop {
       planetScale: this.config.planetScale,
       applyRefraction: this.config.applyRefraction,
     });
+    this.sunLayer = new SunLayer(gl, {
+      latitude: this.config.latitude,
+      longitude: this.config.longitude,
+      time: this.config.time,
+      applyRefraction: this.config.applyRefraction,
+    });
+    this.moonLayer = new MoonLayer(gl, {
+      latitude: this.config.latitude,
+      longitude: this.config.longitude,
+      time: this.config.time,
+      applyRefraction: this.config.applyRefraction,
+    });
 
-    // Add layers to scene (order matters: sky first, stars, then planets on top)
+    // Add layers to scene (order matters: sky first, stars, then planets, then Sun and Moon on top)
     this.sceneHost.addLayer(this.skyDome);
     this.sceneHost.addLayer(this.starLayer);
     this.sceneHost.addLayer(this.planetLayer);
+    this.sceneHost.addLayer(this.sunLayer);
+    this.sceneHost.addLayer(this.moonLayer);
 
     // Set initial camera orientation
     this.sceneHost.setCameraOrientation(
@@ -217,6 +240,8 @@ export class StarBackdrop {
     this.config.longitude = longitude;
     this.starLayer.updateObserver(latitude, longitude, this.config.time);
     this.planetLayer.updateObserver(latitude, longitude, this.config.time);
+    this.sunLayer.updateConfig({ latitude, longitude });
+    this.moonLayer.updateConfig({ latitude, longitude });
   }
 
   /**
@@ -234,6 +259,8 @@ export class StarBackdrop {
       this.config.longitude,
       time
     );
+    this.sunLayer.updateConfig({ time });
+    this.moonLayer.updateConfig({ time });
   }
 
   /**
@@ -272,6 +299,59 @@ export class StarBackdrop {
 
     // Plan and start slewing animation
     this.planAndExecuteSlew();
+  }
+
+  /**
+   * Update target position smoothly without restarting the slew animation
+   * This is better for continuous tracking when the telescope position is updated frequently
+   *
+   * @param altitude Target altitude in degrees (-90 to 90)
+   * @param azimuth Target azimuth in degrees (0 = North, 90 = East, 180 = South, 270 = West)
+   */
+  updateTarget(altitude: number, azimuth: number): void {
+    // Check if position changed significantly (threshold: 0.1 degrees)
+    const altDiff = Math.abs(altitude - this.targetAlt);
+    const azDiff = Math.abs(this.getShortestAzimuthDistance(azimuth, this.targetAz));
+
+    if (altDiff < 0.1 && azDiff < 0.1) {
+      // Position hasn't changed significantly, skip update to avoid jitter
+      return;
+    }
+
+    console.log(`[StarBackdrop] updateTarget: alt=${altitude.toFixed(2)}°, az=${azimuth.toFixed(2)}° (was: ${this.targetAlt.toFixed(2)}°/${this.targetAz.toFixed(2)}°)`);
+
+    // Update target
+    this.targetAlt = altitude;
+    this.targetAz = azimuth;
+
+    // If not currently slewing, start a new slew
+    if (!this.isSlewing) {
+      this.planAndExecuteSlew();
+      return;
+    }
+
+    // If already slewing, smoothly update the endpoint of the current path
+    // This avoids jarring restarts during continuous movement
+    if (this.slewPath.length > 0) {
+      // Update the final segment's endpoint
+      const lastSegment = this.slewPath[this.slewPath.length - 1];
+      lastSegment.endAlt = altitude;
+      lastSegment.endAz = azimuth;
+
+      // Recalculate duration for the updated final segment
+      const deltaAlt = Math.abs(lastSegment.endAlt - lastSegment.startAlt);
+      let deltaAz = lastSegment.endAz - lastSegment.startAz;
+      while (deltaAz > 180) deltaAz -= 360;
+      while (deltaAz < -180) deltaAz += 360;
+      const absDeltaAz = Math.abs(deltaAz);
+
+      const timeAlt = deltaAlt / this.maxAltitudeRate;
+      const timeAz = absDeltaAz / this.maxAzimuthRate;
+      const durationSec = Math.max(timeAlt, timeAz);
+      lastSegment.duration = Math.max(200, durationSec * 1000);
+
+      console.log(`[StarBackdrop] Updated final segment endpoint: alt ${lastSegment.startAlt.toFixed(2)}°->${lastSegment.endAlt.toFixed(2)}°, az ${lastSegment.startAz.toFixed(2)}°->${lastSegment.endAz.toFixed(2)}°`);
+    }
   }
 
   /**
@@ -504,6 +584,10 @@ export class StarBackdrop {
     const azDiff = this.getShortestAzimuthDistance(segment.startAz, segment.endAz);
     let newAz = segment.startAz + azDiff * easedProgress;
     newAz = ((newAz % 360) + 360) % 360;
+
+    // Update current position tracking
+    this.currentAlt = newAlt;
+    this.currentAz = newAz;
 
     // Update camera
     const pitch = newAlt * (Math.PI / 180);
