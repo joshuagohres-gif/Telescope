@@ -11,6 +11,7 @@ import Calibration from "@/pages/calibration";
 import SkyMap from "@/pages/skymap";
 import AstroDB from "@/pages/astrodb";
 import DesignKB from "@/pages/design";
+import LiquidGlassDemo from "@/pages/LiquidGlassDemo";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/skymap" component={SkyMap} />
       <Route path="/astrodb" component={AstroDB} />
       <Route path="/design" component={DesignKB} />
+      <Route path="/liquid-glass" component={LiquidGlassDemo} />
       <Route component={NotFound} />
     </Switch>
   );
