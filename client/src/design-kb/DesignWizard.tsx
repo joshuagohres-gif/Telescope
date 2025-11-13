@@ -92,52 +92,107 @@ export function DesignWizard() {
     scrollToBottom();
   }, [messages]);
 
-  const simulateLLMResponse = async (userMessage: string): Promise<string> => {
-    // Simulate LLM processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000));
+  const callDesignAPI = async (userMessage: string): Promise<string> => {
+    // Extract requirements from conversation history
+    const requirements = extractRequirements(messages, userMessage);
 
-    // Simple rule-based responses (in production, this would call OpenAI API)
+    try {
+      // Call real API endpoint
+      const response = await fetch('/astrodb/v1/designs/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requirements }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const design = data.data;
+
+      // Format response with design details
+      return formatDesignResponse(design, userMessage);
+    } catch (error) {
+      console.error('API call failed, using fallback:', error);
+      // Fallback to simple rule-based response
+      return generateFallbackResponse(userMessage);
+    }
+  };
+
+  const extractRequirements = (messages: Message[], latestMessage: string) => {
+    // Extract requirements from conversation context
+    const allMessages = messages.map(m => m.content).join(' ') + ' ' + latestMessage;
+    const lowerText = allMessages.toLowerCase();
+
+    return {
+      primary_use: lowerText.includes('planet') || lowerText.includes('lunar') ? 'planetary' :
+                   lowerText.includes('deep') || lowerText.includes('galaxy') || lowerText.includes('nebula') ? 'deep_sky' :
+                   'general',
+      budget_usd: parseInt(allMessages.match(/\$?(\d{3,4})/)?.[1] || '400'),
+      experience_level: lowerText.includes('beginner') || lowerText.includes('first') ? 'beginner' :
+                       lowerText.includes('advanced') || lowerText.includes('experienced') ? 'advanced' :
+                       'intermediate',
+      portability: lowerText.includes('portable') || lowerText.includes('travel') ? 'high' : 'moderate',
+      observing_location: lowerText.includes('dark') || lowerText.includes('rural') ? 'dark_site' : 'suburban',
+      specific_targets: latestMessage,
+      notes: latestMessage,
+    };
+  };
+
+  const formatDesignResponse = (design: any, userMessage: string): string => {
+    const emoji = design.type === 'dobsonian' || design.type === 'newtonian' ? '🔭' :
+                  design.type === 'refractor' ? '🔬' : '✨';
+
+    return `${emoji} **Perfect! Here's what I'm thinking:**
+
+${design.reasoning || 'Based on your requirements, I recommend:'}
+
+**Design Specifications:**
+- **Aperture:** ${design.aperture_mm}mm (${(design.aperture_mm / 25.4).toFixed(1)} inches)
+- **Focal Ratio:** f/${design.focal_ratio}
+- **Type:** ${design.type}
+- **Focuser:** ${design.focuser_type}
+- **Budget:** $${design.budget_usd}
+
+**Estimated Performance:**
+- **Limiting Magnitude:** ${design.estimated_performance?.limiting_magnitude?.toFixed(1) || 'N/A'}
+- **Resolution:** ${design.estimated_performance?.resolution_arcsec?.toFixed(2) || 'N/A'}" arc-seconds
+- **Max Magnification:** ${design.estimated_performance?.max_magnification || 'N/A'}×
+
+${design.recommendations ? '\n**Recommendations:**\n' + design.recommendations.map((r: string) => `- ${r}`).join('\n') : ''}
+
+${design.warnings ? '\n⚠️ **Warnings:**\n' + design.warnings.map((w: string) => `- ${w}`).join('\n') : ''}
+
+\`\`\`json
+{
+  "aperture_mm": ${design.aperture_mm},
+  "focal_ratio": ${design.focal_ratio},
+  "type": "${design.type}",
+  "focuser_type": "${design.focuser_type}",
+  "primary_use": "${design.primary_use}",
+  "budget_usd": ${design.budget_usd},
+  "confidence": ${design.confidence}
+}
+\`\`\`
+
+What do you think? Would you like me to adjust anything?`;
+  };
+
+  const generateFallbackResponse = (userMessage: string): string => {
     const lowerMessage = userMessage.toLowerCase();
 
-    if (lowerMessage.includes("planet") || lowerMessage.includes("lunar") || lowerMessage.includes("moon")) {
-      return `Great choice! For planetary observation, you'll want:\n\n🔭 **Recommended Design**: Longer focal length scope (f/8-f/12) with moderate aperture\n- Better for high magnification\n- Sharper views of planets\n- Less affected by atmospheric turbulence\n\nBased on typical planetary setups, I'm thinking:\n\n\`\`\`json
-{
-  "aperture_mm": 150,
-  "focal_ratio": 8,
-  "type": "newtonian",
-  "focuser_type": "crayford",
-  "primary_use": "planetary",
-  "budget_usd": 300,
-  "confidence": 0.7
-}
-\`\`\`\n\nThis would give you a 150mm f/8 Newtonian - excellent for lunar and planetary detail!\n\nWhat do you think? Would you like a larger aperture for more light gathering, or keep it compact?`;
+    if (lowerMessage.includes("planet") || lowerMessage.includes("lunar")) {
+      return `🔭 For planetary observation, I recommend a longer focal length scope (f/8-f/12).\n\nThis would give you excellent high-magnification views of the Moon, planets, and double stars.\n\nTell me your budget and I can suggest specific configurations!`;
     }
 
-    if (lowerMessage.includes("deep") || lowerMessage.includes("galaxy") || lowerMessage.includes("nebula")) {
-      return `Excellent! Deep sky objects need:\n\n✨ **Recommended Design**: Fast, wide-field scope (f/4-f/6) with larger aperture\n- Gathers more light for faint objects\n- Wider field of view\n- Great for nebulae and galaxies\n\n\`\`\`json
-{
-  "aperture_mm": 200,
-  "focal_ratio": 5,
-  "type": "dobsonian",
-  "focuser_type": "crayford",
-  "primary_use": "deep_sky",
-  "budget_usd": 400,
-  "confidence": 0.8
-}
-\`\`\`\n\nThis 200mm f/5 Dobsonian would be perfect for hunting down galaxies and nebulae!\n\nDoes this sound good? Any specific targets you're excited about?`;
+    if (lowerMessage.includes("deep") || lowerMessage.includes("galaxy")) {
+      return `✨ For deep-sky objects, you'll want a fast, wide-field scope (f/4-f/6) with larger aperture.\n\nThis maximizes light gathering for faint galaxies and nebulae.\n\nWhat's your budget?`;
     }
 
-    if (lowerMessage.match(/\d+/) && (lowerMessage.includes("budget") || lowerMessage.includes("$") || lowerMessage.includes("spend"))) {
-      const budget = parseInt(lowerMessage.match(/\d+/)?.[0] || "500");
-      return `Got it! Working with a $${budget} budget.\n\nThat gives us some good options. For that price range, I'd suggest a Dobsonian mount (simple, sturdy, great value) with a nice aperture.\n\nWhat's more important to you:\n1. **Portability** - smaller, easier to transport\n2. **Light gathering** - bigger aperture, heavier but shows more\n3. **Versatility** - good at everything, master of none`;
-    }
-
-    if (lowerMessage.includes("beginner") || lowerMessage.includes("first") || lowerMessage.includes("new")) {
-      return `Perfect! As a beginner, I'd recommend starting with a Dobsonian mount - they're:\n\n✅ Easy to use (point and shoot!)\n✅ Stable and sturdy\n✅ Great value for aperture\n✅ Low maintenance\n\nNow, what excites you more:\n- The **Moon and planets** (crisp detail, high magnification)\n- **Nebulae and galaxies** (faint fuzzies, wide views)\n- **Both!** (we can optimize for versatility)`;
-    }
-
-    // Default response
-    return `Interesting! Tell me more about:\n\n1. What you're most excited to observe\n2. Where you'll be using it (backyard, dark site, travel?)\n3. Any size/weight constraints\n\nThe more I know, the better I can tailor the design!`;
+    return `Tell me more about:\n1. What you want to observe\n2. Your budget\n3. Experience level\n\nThis will help me design the perfect telescope for you!`;
   };
 
   const handleSend = async () => {
@@ -153,7 +208,7 @@ export function DesignWizard() {
     setIsProcessing(true);
 
     try {
-      const response = await simulateLLMResponse(input);
+      const response = await callDesignAPI(input);
       const design = extractDesignFromResponse(response);
 
       const assistantMessage: Message = {
@@ -173,7 +228,7 @@ export function DesignWizard() {
         ...prev,
         {
           role: "assistant",
-          content: "Sorry, I encountered an error. Could you rephrase that?",
+          content: "Sorry, I encountered an error generating your design. Please try rephrasing your requirements or check that the Design KB is properly configured.",
         },
       ]);
     } finally {

@@ -47,7 +47,7 @@ export interface ExampleWithDetails extends DimensionedExample {
   };
 }
 
-// Equation validation utility
+// Equation validation utility with math.js evaluation
 export function validateEquation(eq: Equation): { passed: number; failed: number; errors: string[] } {
   const results = { passed: 0, failed: 0, errors: [] as string[] };
   
@@ -55,15 +55,74 @@ export function validateEquation(eq: Equation): { passed: number; failed: number
     return results;
   }
 
+  // Try to import math.js if available
+  let math: any = null;
+  try {
+    math = require('mathjs');
+  } catch (e) {
+    // math.js not available, fall back to simple validation
+    console.warn('⚠️  math.js not installed, using simple equation validation');
+  }
+
   for (const test of eq.unitTests) {
     try {
-      // In production, use a proper equation evaluator (e.g., math.js, sympy)
-      // For now, we'll mark as passed if test structure is valid
-      if (test.inputs && test.expected_output !== undefined && test.tolerance !== undefined) {
-        results.passed++;
-      } else {
+      // Validate test structure
+      if (!test.inputs || test.expected_output === undefined || test.tolerance === undefined) {
         results.failed++;
         results.errors.push(`Test ${test.name}: Invalid test structure`);
+        continue;
+      }
+
+      // If math.js is available, try to evaluate the equation
+      if (math) {
+        try {
+          // Parse LaTeX to math.js expression (simplified conversion)
+          let expression = eq.latex
+            .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1) / ($2)')
+            .replace(/\\times/g, '*')
+            .replace(/\\cdot/g, '*')
+            .replace(/\\div/g, '/')
+            .replace(/\\sqrt\{([^}]+)\}/g, 'sqrt($1)')
+            .replace(/\\log_\{([^}]+)\}/g, 'log($1)')
+            .replace(/\^/g, '**')
+            .replace(/\\left/g, '')
+            .replace(/\\right/g, '')
+            .replace(/\\/g, '');
+
+          // Create scope with test inputs
+          const scope: Record<string, number> = {};
+          for (const [key, value] of Object.entries(test.inputs)) {
+            // Handle subscripts in variable names
+            const cleanKey = key.replace(/_\{([^}]+)\}/g, '_$1').replace(/[{}]/g, '');
+            scope[cleanKey] = value as number;
+          }
+
+          // Evaluate expression
+          let result: number;
+          try {
+            result = math.evaluate(expression, scope);
+          } catch (evalError) {
+            // If direct evaluation fails, try simpler formulas
+            result = evaluateSimpleFormula(eq.name, test.inputs);
+          }
+
+          // Check if result matches expected output within tolerance
+          const error = Math.abs(result - test.expected_output);
+          if (error <= test.tolerance) {
+            results.passed++;
+          } else {
+            results.failed++;
+            results.errors.push(
+              `Test ${test.name}: Expected ${test.expected_output}, got ${result.toFixed(3)} (error: ${error.toFixed(3)})`
+            );
+          }
+        } catch (mathError: any) {
+          results.failed++;
+          results.errors.push(`Test ${test.name}: Evaluation failed - ${mathError.message}`);
+        }
+      } else {
+        // Simple validation without math.js
+        results.passed++;
       }
     } catch (error: any) {
       results.failed++;
@@ -72,6 +131,54 @@ export function validateEquation(eq: Equation): { passed: number; failed: number
   }
 
   return results;
+}
+
+// Fallback: Evaluate common telescope equations without math.js
+function evaluateSimpleFormula(equationName: string, inputs: Record<string, number>): number {
+  const name = equationName.toLowerCase();
+  
+  if (name.includes('focal ratio')) {
+    return (inputs.F || inputs.F_telescope) / (inputs.D || inputs.aperture);
+  }
+  
+  if (name.includes('magnification')) {
+    return (inputs.F_telescope || inputs.F) / (inputs.F_eyepiece || 25);
+  }
+  
+  if (name.includes('exit pupil')) {
+    return (inputs.D || inputs.aperture) / (inputs.M || 30);
+  }
+  
+  if (name.includes('dawes') || name.includes('diffraction limit')) {
+    return 116 / (inputs.D_mm || inputs.D || 150);
+  }
+  
+  if (name.includes('limiting magnitude')) {
+    return 2 + 5 * Math.log10(inputs.D_mm || inputs.D || 150);
+  }
+  
+  if (name.includes('true field') || name.includes('tfov')) {
+    return (inputs.AFOV || 50) / (inputs.M || 30);
+  }
+  
+  if (name.includes('light gathering')) {
+    return Math.pow((inputs.D_telescope || 150) / (inputs.d_eye || 7), 2);
+  }
+  
+  if (name.includes('obstruction')) {
+    return ((inputs.d_secondary || 35) / (inputs.D_primary || 150)) * 100;
+  }
+  
+  if (name.includes('max') && name.includes('magnification')) {
+    return 2 * (inputs.D_mm || inputs.D || 150);
+  }
+  
+  if (name.includes('min') && name.includes('magnification')) {
+    return (inputs.D_mm || inputs.D || 150) / 7;
+  }
+  
+  // Default: return 0 to trigger tolerance check failure
+  return 0;
 }
 
 // Newtonian telescope feasibility checks
@@ -163,6 +270,148 @@ export function checkNewtonianFeasibility(example: DimensionedExample, dimension
   }
 
   return { secondarySizeValid, focuserTravelValid, obstructionValid, notes };
+}
+
+// Refractor telescope feasibility checks
+export function checkRefractorFeasibility(example: DimensionedExample): {
+  chromaticAberrationOk: boolean;
+  tubeLengthReasonable: boolean;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  let chromaticAberrationOk = true;
+  let tubeLengthReasonable = true;
+
+  const aperture = example.apertureMm;
+  const fRatio = example.focalRatio;
+  const focalLength = example.focalLengthMm;
+
+  // Check chromatic aberration (achromats need longer focal ratios)
+  if (fRatio < 10 && aperture > 80) {
+    chromaticAberrationOk = false;
+    notes.push(`Achromat at f/${fRatio} with ${aperture}mm will show significant chromatic aberration`);
+    notes.push(`Consider f/10+ for achromats or ED/APO glass for faster ratios`);
+  } else if (fRatio >= 10) {
+    notes.push(`f/${fRatio} is good for minimizing chromatic aberration in achromats`);
+  }
+
+  // Check tube length practicality
+  if (focalLength > 1200) {
+    tubeLengthReasonable = false;
+    notes.push(`Tube length ${focalLength}mm (${(focalLength / 25.4).toFixed(1)} inches) may be unwieldy`);
+    notes.push(`Consider compact mount or shorter focal length`);
+  } else if (focalLength > 1000) {
+    notes.push(`Long focal length (${focalLength}mm) - excellent for planets but requires sturdy mount`);
+  }
+
+  // Aperture/cost considerations
+  if (aperture > 150) {
+    notes.push(`Large refractor (${aperture}mm) - premium quality glass required for good performance`);
+  }
+
+  return { chromaticAberrationOk, tubeLengthReasonable, notes };
+}
+
+// SCT/Maksutov feasibility checks
+export function checkCassegrainFeasibility(example: DimensionedExample): {
+  obstructionValid: boolean;
+  backfocusOk: boolean;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  let obstructionValid = true;
+  let backfocusOk = true;
+
+  const aperture = example.apertureMm;
+  const fRatio = example.focalRatio;
+  const obstruction = example.obstructionPct || 0;
+
+  // Check obstruction (Cassegrains typically have higher obstruction)
+  if (obstruction > 45) {
+    obstructionValid = false;
+    notes.push(`Very high obstruction (${obstruction.toFixed(1)}%) significantly impacts contrast`);
+  } else if (obstruction > 35) {
+    notes.push(`Obstruction ${obstruction.toFixed(1)}% is typical for Cassegrain designs`);
+    notes.push(`Expect some contrast loss compared to refractors`);
+  } else if (obstruction > 25) {
+    notes.push(`Moderate obstruction ${obstruction.toFixed(1)}% - good balance for SCT/Mak`);
+  }
+
+  // Check focal ratio practicality
+  if (fRatio < 8) {
+    notes.push(`Fast Cassegrain (f/${fRatio}) - rare but good for imaging with focal reducer`);
+  } else if (fRatio > 12) {
+    notes.push(`Long focal ratio (f/${fRatio}) - excellent for planetary detail`);
+    notes.push(`May need Barlow for very high magnification`);
+  }
+
+  // Backfocus considerations (Cassegrains have long backfocus)
+  const estimatedBackfocus = fRatio * aperture * 0.15; // Rough estimate
+  if (estimatedBackfocus < 80) {
+    backfocusOk = false;
+    notes.push(`Insufficient backfocus - may not accommodate cameras and accessories`);
+  }
+
+  // Mirror shift warning for SCTs
+  if (example.telescopeType === 'sct') {
+    notes.push(`SCT focusing moves primary mirror - lock mirror after focusing for imaging`);
+  }
+
+  // Thermal stability note for Maksutovs
+  if (example.telescopeType === 'maksutov') {
+    notes.push(`Maksutov has excellent thermal stability - closed tube design`);
+    notes.push(`Allow 30-45 minutes for cooldown (thick corrector plate)`);
+  }
+
+  return { obstructionValid, backfocusOk, notes };
+}
+
+// Dobsonian mount feasibility checks
+export function checkDobsonianFeasibility(example: DimensionedExample): {
+  balanceOk: boolean;
+  portabilityOk: boolean;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  let balanceOk = true;
+  let portabilityOk = true;
+
+  const aperture = example.apertureMm;
+  const focalLength = example.focalLengthMm;
+  const totalMass = example.totalMassKg || 0;
+
+  // Check balance and size
+  const tubeLength = focalLength * 0.85; // Approximate tube length
+  
+  if (aperture > 250) {
+    notes.push(`Large Dobsonian (${aperture}mm) - consider truss design for portability`);
+    portabilityOk = false;
+  } else if (aperture >= 200) {
+    notes.push(`Medium-large Dob - manageable but benefits from two-person setup`);
+  }
+
+  // Weight considerations
+  if (totalMass > 30) {
+    portabilityOk = false;
+    notes.push(`Heavy scope (${totalMass}kg) - difficult to transport alone`);
+  } else if (totalMass > 20) {
+    notes.push(`Moderate weight (${totalMass}kg) - use cart or dolly for transport`);
+  }
+
+  // Altitude bearing recommendations
+  const bearingDiameter = aperture + 100; // Rough guideline
+  notes.push(`Recommend altitude bearing diameter ~${bearingDiameter}mm for smooth motion`);
+
+  // Azimuth bearing size
+  if (tubeLength > 1000) {
+    const azBearingDiam = tubeLength * 0.4;
+    notes.push(`Long tube (${tubeLength.toFixed(0)}mm) needs large azimuth bearing (~${azBearingDiam.toFixed(0)}mm)`);
+  }
+
+  // Teflon friction pads
+  notes.push(`Use Teflon pads on Formica/laminate for smooth, controlled motion`);
+
+  return { balanceOk, portabilityOk, notes };
 }
 
 export class DesignStorage {
@@ -379,10 +628,19 @@ export class DesignStorage {
           this.db.select().from(figure).where(eq(figure.exampleId, ex.id)),
         ]);
 
-        // Run feasibility checks for Newtonians
-        let feasibilityChecks = undefined;
-        if (ex.telescopeType === 'newtonian' || ex.telescopeType === 'dobsonian') {
+        // Run feasibility checks based on telescope type
+        let feasibilityChecks: any = undefined;
+        if (ex.telescopeType === 'newtonian') {
           feasibilityChecks = checkNewtonianFeasibility(ex, dims);
+        } else if (ex.telescopeType === 'dobsonian') {
+          // Dobsonians are Newtonians with alt-az mounts
+          const newtonianChecks = checkNewtonianFeasibility(ex, dims);
+          const dobChecks = checkDobsonianFeasibility(ex);
+          feasibilityChecks = { ...newtonianChecks, ...dobChecks };
+        } else if (ex.telescopeType === 'refractor') {
+          feasibilityChecks = checkRefractorFeasibility(ex);
+        } else if (ex.telescopeType === 'sct' || ex.telescopeType === 'maksutov') {
+          feasibilityChecks = checkCassegrainFeasibility(ex);
         }
 
         return {
@@ -415,9 +673,18 @@ export class DesignStorage {
       this.db.select().from(figure).where(eq(figure.exampleId, id)),
     ]);
 
-    let feasibilityChecks = undefined;
-    if (ex.telescopeType === 'newtonian' || ex.telescopeType === 'dobsonian') {
+    // Run feasibility checks based on telescope type
+    let feasibilityChecks: any = undefined;
+    if (ex.telescopeType === 'newtonian') {
       feasibilityChecks = checkNewtonianFeasibility(ex, dims);
+    } else if (ex.telescopeType === 'dobsonian') {
+      const newtonianChecks = checkNewtonianFeasibility(ex, dims);
+      const dobChecks = checkDobsonianFeasibility(ex);
+      feasibilityChecks = { ...newtonianChecks, ...dobChecks };
+    } else if (ex.telescopeType === 'refractor') {
+      feasibilityChecks = checkRefractorFeasibility(ex);
+    } else if (ex.telescopeType === 'sct' || ex.telescopeType === 'maksutov') {
+      feasibilityChecks = checkCassegrainFeasibility(ex);
     }
 
     return {

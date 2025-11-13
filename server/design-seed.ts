@@ -377,10 +377,10 @@ export async function seedDesignKB() {
 
     console.log(`Inserted ${concepts.length} concepts`);
 
-    // ===== EQUATIONS (25+) =====
+    // ===== EQUATIONS (20+) =====
     console.log("Seeding equations...");
     
-    const { seedEquations, seedDimensionedExamples } = await import("./design-seed-data");
+    const { seedEquations, seedDimensionedExamples, seedRulesOfThumb } = await import("./design-seed-data");
     
     const equations = await db.insert(equation).values(seedEquations as any[]).onConflictDoNothing().returning();
     console.log(`Inserted ${equations.length} equations`);
@@ -584,6 +584,18 @@ If you accidentally view the Sun through unfiltered optics:
     ]).onConflictDoNothing().returning();
     
     console.log(`Inserted ${procedures.length} procedures`);
+
+    // ===== RULES OF THUMB (50) =====
+    console.log("Seeding rules of thumb...");
+    
+    const rules = await db.insert(ruleOfThumb).values(
+      seedRulesOfThumb.map(rule => ({
+        ...rule,
+        sourceRefId: sources[0]?.id || null,
+      }))
+    ).onConflictDoNothing().returning();
+    
+    console.log(`Inserted ${rules.length} rules of thumb`);
 
     // ===== CROSS-REFERENCES =====
     console.log("Creating cross-references...");
