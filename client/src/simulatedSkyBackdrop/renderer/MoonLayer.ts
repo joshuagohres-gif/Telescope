@@ -459,8 +459,8 @@ export class MoonLayer implements RenderLayer {
 
     const { gl } = this;
 
-    // Update moon data if needed
-    if (this.needsUpdate) {
+    // Update moon data if needed (or force update every render for real-time position)
+    if (this.needsUpdate || true) {
       this.updateMoonData();
       this.needsUpdate = false;
     }
@@ -469,6 +469,7 @@ export class MoonLayer implements RenderLayer {
     if (this.moonData.position[1] < -0.05) {
       return;
     }
+
 
     // Use shader program
     gl.useProgram(this.program);

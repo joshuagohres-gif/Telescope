@@ -3,7 +3,6 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
-import { useLiquidGlass } from "@/hooks/use-liquid-glass"
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
@@ -22,7 +21,7 @@ const buttonVariants = cva(
         secondary: "border bg-secondary text-secondary-foreground border border-secondary-border ",
         // Add a transparent border so that when someone toggles a border on later, it doesn't shift layout/size.
         ghost: "border border-transparent",
-        glass: "bg-white/10 backdrop-blur-md border border-white/20 text-foreground shadow-lg hover:bg-white/15 hover:shadow-xl transition-all duration-300",
+        glass: "relative overflow-hidden bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-md border border-white/20 text-foreground shadow-lg hover:shadow-xl hover:border-white/30 transition-all duration-300 before:absolute before:inset-0 before:bg-gradient-to-br before:from-transparent before:via-white/10 before:to-transparent before:translate-x-[-100%] hover:before:translate-x-[100%] before:transition-transform before:duration-700",
       },
       // Heights are set as "min" heights, because sometimes Ai will place large amount of content
       // inside buttons. With a min-height they will look appropriate with small amounts of content,
@@ -45,36 +44,19 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
-  liquidGlass?: boolean
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, liquidGlass, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"
-    const glassRef = useLiquidGlass({ 
-      enabled: liquidGlass || variant === "glass",
-      intensity: 0.4,
-      borderRadius: 0.5,
-    })
-    
-    // Merge refs
-    const mergedRef = React.useCallback(
-      (node: HTMLButtonElement) => {
-        // @ts-ignore - Setting ref
-        glassRef.current = node;
-        if (typeof ref === 'function') {
-          ref(node);
-        } else if (ref) {
-          ref.current = node;
-        }
-      },
-      [ref, glassRef]
-    );
-    
+
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={mergedRef}
+        className={cn(
+          buttonVariants({ variant, size, className }),
+          "cosmic-glow-pulse"
+        )}
+        ref={ref}
         {...props}
       />
     )

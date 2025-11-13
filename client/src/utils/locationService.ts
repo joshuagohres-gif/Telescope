@@ -173,20 +173,35 @@ export class LocationService {
   /**
    * Set manual location (for testing or when user enters coordinates)
    */
-  setManualLocation(latitude: number, longitude: number, altitude?: number): LocationData {
-    const locationData: LocationData = {
-      latitude,
-      longitude,
-      altitude,
-      accuracy: 0,
-      timestamp: Date.now(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      localTime: new Date(),
-      source: 'manual',
-    };
+  setManualLocation(locationOrLatitude: LocationData | number, longitude?: number, altitude?: number): LocationData {
+    let locationData: LocationData;
+
+    if (typeof locationOrLatitude === 'object') {
+      // Full LocationData object provided
+      locationData = locationOrLatitude;
+    } else {
+      // Individual coordinates provided
+      locationData = {
+        latitude: locationOrLatitude,
+        longitude: longitude!,
+        altitude,
+        accuracy: 0,
+        timestamp: Date.now(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        localTime: new Date(),
+        source: 'manual',
+      };
+    }
 
     this.cachedLocation = locationData;
     return locationData;
+  }
+
+  /**
+   * Get current location from GPS (alias for getGPSLocation for clarity)
+   */
+  async getCurrentLocation(): Promise<LocationData> {
+    return this.getGPSLocation();
   }
 
   /**

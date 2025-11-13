@@ -42,39 +42,82 @@ export function StarBackdropView({ ra, dec, alt, az, enabled = true }: StarBackd
   const [location, setLocation] = useState<LocationData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Get user location on mount
+  // Get user location on mount and watch for changes
   useEffect(() => {
     if (!enabled) return;
 
-    locationService.getLocation()
-      .then((loc) => {
-        setLocation(loc);
+    // Initial location fetch
+    const fetchLocation = () => {
+      // First check if there's a cached/manual location
+      const cached = locationService.getCachedLocation();
+      if (cached) {
+        setLocation(cached);
         setError(null);
-      })
-      .catch((err) => {
-        console.error('Failed to get location:', err);
-        setError('Location unavailable');
+        return;
+      }
 
-        // Fallback to default location (San Francisco)
-        setLocation({
-          latitude: 37.7749,
-          longitude: -122.4194,
-          accuracy: 0,
-          timestamp: Date.now(),
-          timezone: 'America/Los_Angeles',
-          localTime: new Date(),
-          source: 'manual'
+      // Otherwise try to get location
+      locationService.getLocation()
+        .then((loc) => {
+          setLocation(loc);
+          setError(null);
+        })
+        .catch((err) => {
+          console.error('Failed to get location:', err);
+          setError('Location unavailable');
+
+          // Fallback to default location (San Francisco)
+          setLocation({
+            latitude: 37.7749,
+            longitude: -122.4194,
+            accuracy: 0,
+            timestamp: Date.now(),
+            timezone: 'America/Los_Angeles',
+            localTime: new Date(),
+            source: 'manual'
+          });
         });
-      });
+    };
+
+    fetchLocation();
+
+    // Poll for location changes every second (to catch manual updates)
+    const pollInterval = setInterval(() => {
+      const cached = locationService.getCachedLocation();
+      if (cached) {
+        setLocation(prev => {
+          // Only update if location actually changed
+          if (!prev ||
+              prev.latitude !== cached.latitude ||
+              prev.longitude !== cached.longitude ||
+              prev.timestamp !== cached.timestamp) {
+            console.log('[StarBackdropView] Location updated:', cached);
+            return cached;
+          }
+          return prev;
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(pollInterval);
   }, [enabled]);
 
   // Initialize StarBackdrop when location is available
   useEffect(() => {
-    if (!enabled || !location || !containerRef.current || backdropRef.current) {
+    if (!enabled || !location || !containerRef.current) {
       return;
     }
 
+    // If backdrop already exists, just update the location
+    if (backdropRef.current) {
+      console.log('[StarBackdropView] Updating backdrop location to:', location.latitude, location.longitude);
+      backdropRef.current.setLocation(location.latitude, location.longitude);
+      return;
+    }
+
+    // Create new backdrop
     try {
+      console.log('[StarBackdropView] Initializing backdrop with location:', location.latitude, location.longitude);
       const backdrop = new StarBackdrop({
         container: containerRef.current,
         latitude: location.latitude,

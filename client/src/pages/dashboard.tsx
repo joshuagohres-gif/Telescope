@@ -23,6 +23,9 @@ import { CommandHistory } from "@/components/telescope/command-history";
 import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
 import { DeviceDiscovery } from "@/components/telescope/device-discovery";
+import { LocationControl } from "@/components/telescope/location-control";
+import { useStarField } from "@/hooks/use-star-field";
+import { ConstellationBackground } from "@/components/ui/constellation-background";
 import {
   Telescope,
   Target,
@@ -45,10 +48,15 @@ export default function Dashboard() {
   const [location, navigate] = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // Add space-themed background effects
+  useStarField({ starCount: 100, speed: 0.3 });
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      {/* Constellation background layer */}
+      <ConstellationBackground opacity={0.2} />
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card relative z-20">
         <div className="max-w-screen-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
             <DropdownMenuTrigger asChild>
@@ -134,21 +142,21 @@ export default function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <div className="max-w-screen-2xl mx-auto p-4">
+      <div className="max-w-screen-2xl mx-auto p-4 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column: Command Input & History */}
-          <div className="lg:col-span-3 flex flex-col gap-4">
+          <div className="lg:col-span-3 flex flex-col gap-4 relative z-10">
             <CommandInput />
             <CommandHistory />
           </div>
 
           {/* Center Column: Viewport & Controls */}
-          <div className="lg:col-span-6 flex flex-col gap-4">
+          <div className="lg:col-span-6 flex flex-col gap-4 relative z-10">
             <TelescopeViewport />
 
-            <Card className="p-6" data-testid="card-control-panels">
+            <Card className="p-6 relative z-10 bg-card" data-testid="card-control-panels">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid grid-cols-6 w-full">
+                <TabsList className="grid grid-cols-7 w-full">
                   <TabsTrigger value="position" className="gap-2" data-testid="tab-position">
                     <Telescope className="w-4 h-4" />
                     <span className="hidden sm:inline">Position</span>
@@ -156,6 +164,10 @@ export default function Dashboard() {
                   <TabsTrigger value="track" className="gap-2" data-testid="tab-track">
                     <Target className="w-4 h-4" />
                     <span className="hidden sm:inline">Track</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="location" className="gap-2" data-testid="tab-location">
+                    <MapPin className="w-4 h-4" />
+                    <span className="hidden sm:inline">Location</span>
                   </TabsTrigger>
                   <TabsTrigger value="camera" className="gap-2" data-testid="tab-camera">
                     <Camera className="w-4 h-4" />
@@ -182,6 +194,9 @@ export default function Dashboard() {
                   <TabsContent value="track" className="mt-0">
                     <TrackingControl />
                   </TabsContent>
+                  <TabsContent value="location" className="mt-0">
+                    <LocationControl />
+                  </TabsContent>
                   <TabsContent value="camera" className="mt-0">
                     <CameraControl />
                   </TabsContent>
@@ -200,7 +215,7 @@ export default function Dashboard() {
           </div>
 
           {/* Right Column: Status Dashboard */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 relative z-10">
             <StatusDashboard />
           </div>
         </div>
