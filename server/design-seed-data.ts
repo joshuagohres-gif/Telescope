@@ -238,8 +238,6 @@ export const seedEquations = [
       },
     ],
   },
-];
-
   // Additional equations (11-20)
   {
     name: "Image Scale",

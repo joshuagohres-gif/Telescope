@@ -1,6 +1,8 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import ws from "ws";
+import "dotenv/config";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+
+const { Pool } = pg;
 import {
   concept,
   equation,
@@ -13,8 +15,6 @@ import {
   sourceRef,
   xref,
 } from "@shared/design-schema";
-
-neonConfig.webSocketConstructor = ws as any;
 
 export async function seedDesignKB() {
   console.log("Starting Design KB seeding...");
@@ -629,7 +629,11 @@ If you accidentally view the Sun through unfiltered optics:
 }
 
 // Run seed if called directly
-if (require.main === module) {
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const isMainModule = process.argv[1] === __filename;
+
+if (isMainModule) {
   seedDesignKB()
     .then(() => {
       console.log("Seed completed");
