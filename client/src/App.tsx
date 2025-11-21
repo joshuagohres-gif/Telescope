@@ -12,6 +12,7 @@ import SkyMap from "@/pages/skymap";
 import AstroDB from "@/pages/astrodb";
 import DesignKB from "@/pages/design";
 import LiquidGlassDemo from "@/pages/LiquidGlassDemo";
+import SkyVisualizers from "@/pages/sky-visualizers";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/astrodb" component={AstroDB} />
       <Route path="/design" component={DesignKB} />
       <Route path="/liquid-glass" component={LiquidGlassDemo} />
+      <Route path="/sky-visualizers" component={SkyVisualizers} />
       <Route component={NotFound} />
     </Switch>
   );

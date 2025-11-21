@@ -20,6 +20,7 @@ import { createCalibRouter } from "./calib-routes";
 import { createTargetsRouter } from "./targets-routes";
 import { createPlanqaRouter } from "./planqa-routes";
 import { createSkymapRouter } from "./skymap-routes";
+import { createSkyVisualizersRouter } from "./sky-visualizers-routes";
 import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled, isSkymapEnabled } from "./astrodb-api/config/flags";
 import { registerDocsRoute } from "./astrodb-api/docs";
 import cadGenerativeRoutes from "./cad-generative-routes";
@@ -237,6 +238,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount combined router
   app.use("/astrodb/v1", astrodbRouter);
+  
+  // Sky Visualizers routes (always available)
+  const skyVisualizersRouter = createSkyVisualizersRouter();
+  app.use("/api", skyVisualizersRouter);
   
   // Register docs endpoint (always available, shows enabled packs)
   registerDocsRoute(app);
