@@ -6,6 +6,7 @@
 import { SceneHost } from './renderer/SceneHost';
 import { SkyDome } from './renderer/SkyDome';
 import { StarLayer } from './renderer/StarLayer';
+import { StaticSkyImageLayer } from './renderer/StaticSkyImageLayer';
 import { PlanetLayer } from './renderer/PlanetLayer';
 import { MoonLayer } from './renderer/MoonLayer';
 import { SunLayer } from './renderer/SunLayer';
@@ -47,9 +48,21 @@ export interface StarBackdropConfig {
   antialias?: boolean;
 
   /**
-   * Star point size scale
+   * Star point size scale (only used if useStaticSkyImage is false)
    */
   starScale?: number;
+
+  /**
+   * Use static sky image instead of computer-generated stars
+   * If true, starScale is ignored and skyImageUrl is used
+   */
+  useStaticSkyImage?: boolean;
+
+  /**
+   * URL to equirectangular sky image (used when useStaticSkyImage is true)
+   * Defaults to environment variable or a default sky image
+   */
+  skyImageUrl?: string;
 
   /**
    * Planet size scale (multiplier for true angular sizes, default 1.0)
@@ -108,7 +121,8 @@ export class StarBackdrop {
   private canvas: HTMLCanvasElement;
   private sceneHost: SceneHost;
   private skyDome: SkyDome;
-  private starLayer: StarLayer;
+  private starLayer: StarLayer | null = null;
+  private staticSkyImageLayer: StaticSkyImageLayer | null = null;
   private planetLayer: PlanetLayer;
   private moonLayer: MoonLayer;
   private sunLayer: SunLayer;
@@ -138,6 +152,12 @@ export class StarBackdrop {
   constructor(config: StarBackdropConfig) {
     this.container = config.container;
 
+    // Get sky image URL from config, environment variable, or default
+    const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
+    const skyImageUrl = config.skyImageUrl || 
+                        (env.VITE_SKY_IMAGE_URL as string | undefined) ||
+                        undefined;
+
     // Fill in defaults
     this.config = {
       latitude: config.latitude,
@@ -145,6 +165,8 @@ export class StarBackdrop {
       time: config.time ?? new Date(),
       antialias: config.antialias ?? true,
       starScale: config.starScale ?? 2.0,
+      useStaticSkyImage: config.useStaticSkyImage ?? true, // Default to static sky image
+      skyImageUrl: skyImageUrl,
       planetScale: config.planetScale ?? 1.0,
       applyRefraction: config.applyRefraction ?? true,
       autoUpdateTime: config.autoUpdateTime ?? false,
@@ -183,13 +205,25 @@ export class StarBackdrop {
 
     // Create render layers
     this.skyDome = new SkyDome(gl);
-    this.starLayer = new StarLayer(gl, {
-      latitude: this.config.latitude,
-      longitude: this.config.longitude,
-      time: this.config.time,
-      pointScale: this.config.starScale,
-      applyRefraction: this.config.applyRefraction,
-    });
+    
+    // Use static sky image or computer-generated stars
+    if (this.config.useStaticSkyImage) {
+      this.staticSkyImageLayer = new StaticSkyImageLayer(gl, {
+        latitude: this.config.latitude,
+        longitude: this.config.longitude,
+        time: this.config.time,
+        imageUrl: this.config.skyImageUrl,
+      });
+    } else {
+      this.starLayer = new StarLayer(gl, {
+        latitude: this.config.latitude,
+        longitude: this.config.longitude,
+        time: this.config.time,
+        pointScale: this.config.starScale,
+        applyRefraction: this.config.applyRefraction,
+      });
+    }
+    
     this.planetLayer = new PlanetLayer(gl, {
       latitude: this.config.latitude,
       longitude: this.config.longitude,
@@ -210,9 +244,13 @@ export class StarBackdrop {
       applyRefraction: this.config.applyRefraction,
     });
 
-    // Add layers to scene (order matters: sky first, stars, then planets, then Sun and Moon on top)
+    // Add layers to scene (order matters: sky first, stars/static sky, then planets, then Sun and Moon on top)
     this.sceneHost.addLayer(this.skyDome);
-    this.sceneHost.addLayer(this.starLayer);
+    if (this.staticSkyImageLayer) {
+      this.sceneHost.addLayer(this.staticSkyImageLayer);
+    } else if (this.starLayer) {
+      this.sceneHost.addLayer(this.starLayer);
+    }
     this.sceneHost.addLayer(this.planetLayer);
     this.sceneHost.addLayer(this.sunLayer);
     this.sceneHost.addLayer(this.moonLayer);
@@ -238,7 +276,11 @@ export class StarBackdrop {
   setLocation(latitude: number, longitude: number): void {
     this.config.latitude = latitude;
     this.config.longitude = longitude;
-    this.starLayer.updateObserver(latitude, longitude, this.config.time);
+    if (this.staticSkyImageLayer) {
+      this.staticSkyImageLayer.updateObserver(latitude, longitude, this.config.time);
+    } else if (this.starLayer) {
+      this.starLayer.updateObserver(latitude, longitude, this.config.time);
+    }
     this.planetLayer.updateObserver(latitude, longitude, this.config.time);
     this.sunLayer.updateConfig({ latitude, longitude });
     this.moonLayer.updateConfig({ latitude, longitude });
@@ -249,11 +291,19 @@ export class StarBackdrop {
    */
   setTime(time: Date): void {
     this.config.time = time;
-    this.starLayer.updateObserver(
-      this.config.latitude,
-      this.config.longitude,
-      time
-    );
+    if (this.staticSkyImageLayer) {
+      this.staticSkyImageLayer.updateObserver(
+        this.config.latitude,
+        this.config.longitude,
+        time
+      );
+    } else if (this.starLayer) {
+      this.starLayer.updateObserver(
+        this.config.latitude,
+        this.config.longitude,
+        time
+      );
+    }
     this.planetLayer.updateObserver(
       this.config.latitude,
       this.config.longitude,
