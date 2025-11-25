@@ -5,11 +5,13 @@ import {
   trajectoryCache,
   skyPathCache,
   visualizationAsset,
+  starCatalog,
   type SolarSystemObject,
   type OrbitalData,
   type TrajectoryCache,
   type SkyPathCache,
   type VisualizationAsset,
+  type StarCatalog,
 } from "@shared/sky-visualizers-schema";
 import { eq, and, gte, lte, or, ilike, desc } from "drizzle-orm";
 
@@ -318,6 +320,16 @@ export class SkyVisualizersStorage {
       .returning();
 
     return inserted;
+  }
+
+  // ===== STARS =====
+
+  async getStars(limit: number = 500): Promise<StarCatalog[]> {
+    return await db
+      .select()
+      .from(starCatalog)
+      .orderBy(starCatalog.magnitude)
+      .limit(limit);
   }
 }
 

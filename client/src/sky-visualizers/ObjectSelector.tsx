@@ -1,5 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Check, ChevronsUpDown, X, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -7,9 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
 
 interface SolarSystemObject {
   id: number;
@@ -19,19 +34,18 @@ interface SolarSystemObject {
 }
 
 interface ObjectSelectorProps {
-  selectedId: number | null;
-  onSelect: (id: number | null) => void;
+  selectedIds: number[];
+  onSelect: (ids: number[]) => void;
 }
 
-export function ObjectSelector({ selectedId, onSelect }: ObjectSelectorProps) {
-  const [search, setSearch] = useState("");
+export function ObjectSelector({ selectedIds, onSelect }: ObjectSelectorProps) {
+  const [open, setOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["sky-visualizers-objects", search, typeFilter],
+  const { data, isLoading } = useQuery({
+    queryKey: ["sky-visualizers-objects", typeFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search) params.set("search", search);
       if (typeFilter !== "all") params.set("type", typeFilter);
       params.set("limit", "100");
 
@@ -44,76 +58,105 @@ export function ObjectSelector({ selectedId, onSelect }: ObjectSelectorProps) {
     },
   });
 
-  const { data: selectedObject } = useQuery({
-    queryKey: ["sky-visualizers-object", selectedId],
+  // Fetch details for selected objects (to display names correctly even if not in current filter list)
+  const { data: selectedObjects } = useQuery({
+    queryKey: ["sky-visualizers-selected-objects", selectedIds],
     queryFn: async () => {
-      if (!selectedId) return null;
-      const response = await fetch(
-        `/api/sky-visualizers/objects/${selectedId}`
+      if (selectedIds.length === 0) return [];
+      const promises = selectedIds.map(id => 
+        fetch(`/api/sky-visualizers/objects/${id}`).then(r => r.json()).then(r => r.data)
       );
-      if (!response.ok) throw new Error("Failed to fetch object");
-      const result = await response.json();
-      return result.data as SolarSystemObject;
+      return Promise.all(promises) as Promise<SolarSystemObject[]>;
     },
-    enabled: !!selectedId,
+    enabled: selectedIds.length > 0
   });
+
+  const handleSelect = (id: number) => {
+    if (selectedIds.includes(id)) {
+      onSelect(selectedIds.filter((i) => i !== id));
+    } else {
+      onSelect([...selectedIds, id]);
+    }
+  };
 
   return (
     <div className="space-y-2">
-      <Label>Solar System Object</Label>
-      <div className="space-y-2">
-        <Input
-          placeholder="Search objects..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Filter by type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="planet">Planets</SelectItem>
-            <SelectItem value="dwarf_planet">Dwarf Planets</SelectItem>
-            <SelectItem value="comet">Comets</SelectItem>
-            <SelectItem value="asteroid">Asteroids</SelectItem>
-            <SelectItem value="moon">Moons</SelectItem>
-            <SelectItem value="neo">Near-Earth Objects</SelectItem>
-          </SelectContent>
-        </Select>
-        {isLoading ? (
-          <div className="flex items-center justify-center p-4">
-            <Loader2 className="w-4 h-4 animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="text-sm text-destructive p-2">
-            Error loading objects
-          </div>
-        ) : (
-          <Select
-            value={selectedId?.toString() || ""}
-            onValueChange={(v) => onSelect(v ? parseInt(v, 10) : null)}
+      <Label>Solar System Objects</Label>
+      
+      <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <SelectTrigger>
+          <SelectValue placeholder="Filter by type" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Types</SelectItem>
+          <SelectItem value="planet">Planets</SelectItem>
+          <SelectItem value="dwarf_planet">Dwarf Planets</SelectItem>
+          <SelectItem value="comet">Comets</SelectItem>
+          <SelectItem value="asteroid">Asteroids</SelectItem>
+          <SelectItem value="moon">Moons</SelectItem>
+          <SelectItem value="neo">Near-Earth Objects</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between"
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select an object" />
-            </SelectTrigger>
-            <SelectContent>
-              {data?.map((obj) => (
-                <SelectItem key={obj.id} value={obj.id.toString()}>
-                  {obj.name}
-                  {obj.designation && ` (${obj.designation})`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+            {selectedIds.length > 0
+              ? `${selectedIds.length} selected`
+              : "Select objects..."}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[300px] p-0">
+          <Command>
+            <CommandInput placeholder="Search objects..." />
+            <CommandList>
+              <CommandEmpty>No objects found.</CommandEmpty>
+              <CommandGroup>
+                {isLoading ? (
+                  <div className="flex justify-center p-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : (
+                  data?.map((obj) => (
+                    <CommandItem
+                      key={obj.id}
+                      value={obj.name}
+                      onSelect={() => handleSelect(obj.id)}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          selectedIds.includes(obj.id)
+                            ? "opacity-100"
+                            : "opacity-0"
+                        )}
+                      />
+                      {obj.name}
+                      {obj.designation && <span className="ml-1 text-muted-foreground text-xs">({obj.designation})</span>}
+                    </CommandItem>
+                  ))
+                )}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {/* Selected Tags */}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {selectedObjects?.map((obj) => (
+            <Badge key={obj.id} variant="secondary" className="cursor-pointer" onClick={() => handleSelect(obj.id)}>
+                {obj.name}
+                <X className="ml-1 h-3 w-3" />
+            </Badge>
+        ))}
       </div>
-      {selectedObject && (
-        <div className="text-sm text-muted-foreground p-2 bg-muted rounded">
-          <div className="font-medium">{selectedObject.name}</div>
-          <div className="text-xs">Type: {selectedObject.type}</div>
-        </div>
-      )}
     </div>
   );
 }

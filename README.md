@@ -65,6 +65,18 @@ See [README-design-kb.md](./README-design-kb.md) for complete documentation.
 
 See [README-extended-astrodb.md](./README-extended-astrodb.md) for complete API documentation.
 
+### Sky Visualizers
+
+**NEW**: Professional-grade orbital mechanics and sky path visualization tools:
+
+- **Orbital Trajectory View**: 3D interactive heliocentric view of solar system objects (planets, asteroids, comets). Supports multi-object selection, ecliptic grid, and smooth camera controls.
+- **Sky Path View**: Accurate Alt/Az path projection for any location on Earth. Features stereographic projection, real star catalog (Bright Stars), and realistic planet positioning.
+- **Solar System Map**: Top-down 2D view of the solar system state for any date range.
+- **Advanced Controls**: 
+  - Multi-object selection
+  - JD (Julian Date) time input
+  - Geolocation support
+
 ## Setup
 
 ### Prerequisites
