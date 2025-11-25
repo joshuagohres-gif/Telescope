@@ -96,6 +96,12 @@ void main() {
 }
 `;
 
+interface PathSegment {
+  startIndex: number;
+  count: number;
+  color: { r: number; g: number; b: number };
+}
+
 export class PathOverlayLayer implements RenderLayer {
   private gl: WebGL2RenderingContext;
   private lineProgram: WebGLProgram | null = null;
@@ -106,7 +112,7 @@ export class PathOverlayLayer implements RenderLayer {
   private markerVertexBuffer: WebGLBuffer | null = null;
 
   private paths: ObjectPath[] = [];
-  private lineVertexCount: number = 0;
+  private pathSegments: PathSegment[] = [];
   private markerVertexCount: number = 0;
 
   // Uniform locations
@@ -132,8 +138,8 @@ export class PathOverlayLayer implements RenderLayer {
   render(ctx: RenderContext): void {
     const { gl } = this;
 
-    // Render path lines
-    if (this.lineProgram && this.lineVao && this.lineVertexCount > 0) {
+    // Render path lines - each path segment separately
+    if (this.lineProgram && this.lineVao && this.pathSegments.length > 0) {
       gl.useProgram(this.lineProgram);
       gl.bindVertexArray(this.lineVao);
 
@@ -144,11 +150,20 @@ export class PathOverlayLayer implements RenderLayer {
         gl.uniformMatrix4fv(this.lineUView, false, ctx.viewMatrix);
       }
 
+      // Disable depth test so paths render on top of sky
+      gl.disable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.lineWidth(2.0);
-      gl.drawArrays(gl.LINE_STRIP, 0, this.lineVertexCount);
 
+      // Render each path segment separately
+      for (const segment of this.pathSegments) {
+        if (segment.count > 1) {
+          gl.drawArrays(gl.LINE_STRIP, segment.startIndex, segment.count);
+        }
+      }
+
+      gl.enable(gl.DEPTH_TEST);
       gl.bindVertexArray(null);
     }
 
@@ -167,10 +182,12 @@ export class PathOverlayLayer implements RenderLayer {
         gl.uniform1f(this.markerUPointSize, 12.0);
       }
 
+      gl.disable(gl.DEPTH_TEST);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.drawArrays(gl.POINTS, 0, this.markerVertexCount);
 
+      gl.enable(gl.DEPTH_TEST);
       gl.bindVertexArray(null);
     }
   }
@@ -207,11 +224,19 @@ export class PathOverlayLayer implements RenderLayer {
   // ===== Private Methods =====
 
   private initialize(): void {
+    console.log('[PathOverlayLayer] Initializing...');
+
     this.lineProgram = this.createShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     this.markerProgram = this.createShaderProgram(MARKER_VERTEX_SHADER, MARKER_FRAGMENT_SHADER);
 
-    if (!this.lineProgram || !this.markerProgram) {
-      throw new Error('Failed to create path overlay shader programs');
+    if (!this.lineProgram) {
+      console.error('[PathOverlayLayer] Failed to create line shader program');
+      throw new Error('Failed to create path overlay line shader program');
+    }
+
+    if (!this.markerProgram) {
+      console.error('[PathOverlayLayer] Failed to create marker shader program');
+      throw new Error('Failed to create path overlay marker shader program');
     }
 
     // Get uniform locations for line program
@@ -226,6 +251,8 @@ export class PathOverlayLayer implements RenderLayer {
     // Create VAOs
     this.createLineVAO();
     this.createMarkerVAO();
+
+    console.log('[PathOverlayLayer] Initialization complete');
   }
 
   private createShaderProgram(vertexSource: string, fragmentSource: string): WebGLProgram | null {
@@ -324,16 +351,19 @@ export class PathOverlayLayer implements RenderLayer {
     // Build line geometry
     const lineVertices: number[] = [];
     const markerVertices: number[] = [];
+    this.pathSegments = [];
+
+    console.log('[PathOverlayLayer] Rebuilding geometry for', this.paths.length, 'paths');
 
     for (const path of this.paths) {
       const color = this.hexToRgb(path.color);
-      let firstVisiblePoint = true;
+      const segmentStart = lineVertices.length / 6; // Track start index for this path
+      let segmentVertexCount = 0;
 
       for (let i = 0; i < path.points.length; i++) {
         const point = path.points[i];
 
         if (!point.visible) {
-          firstVisiblePoint = true;
           continue;
         }
 
@@ -344,6 +374,7 @@ export class PathOverlayLayer implements RenderLayer {
           pos.x, pos.y, pos.z,
           color.r, color.g, color.b
         );
+        segmentVertexCount++;
 
         // If this is the first point (current position), add a marker
         if (i === 0 && point.visible) {
@@ -352,8 +383,16 @@ export class PathOverlayLayer implements RenderLayer {
             color.r, color.g, color.b
           );
         }
+      }
 
-        firstVisiblePoint = false;
+      // Add this path as a segment if it has vertices
+      if (segmentVertexCount > 0) {
+        this.pathSegments.push({
+          startIndex: segmentStart,
+          count: segmentVertexCount,
+          color: color,
+        });
+        console.log(`[PathOverlayLayer] Path ${path.id}: ${segmentVertexCount} visible points from ${path.points.length} total`);
       }
     }
 
@@ -361,9 +400,9 @@ export class PathOverlayLayer implements RenderLayer {
     if (lineVertices.length > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.lineVertexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lineVertices), gl.DYNAMIC_DRAW);
-      this.lineVertexCount = lineVertices.length / 6; // 6 floats per vertex (3 pos + 3 color)
+      console.log('[PathOverlayLayer] Created line buffer with', lineVertices.length / 6, 'vertices');
     } else {
-      this.lineVertexCount = 0;
+      console.log('[PathOverlayLayer] No line vertices to render');
     }
 
     // Update marker buffer
@@ -371,6 +410,7 @@ export class PathOverlayLayer implements RenderLayer {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.markerVertexBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(markerVertices), gl.DYNAMIC_DRAW);
       this.markerVertexCount = markerVertices.length / 6;
+      console.log('[PathOverlayLayer] Created marker buffer with', this.markerVertexCount, 'markers');
     } else {
       this.markerVertexCount = 0;
     }
