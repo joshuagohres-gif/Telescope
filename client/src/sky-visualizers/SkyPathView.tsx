@@ -175,13 +175,21 @@ export function SkyPathView({
   useEffect(() => {
     if (!pathLayerRef.current || !skyPaths) return;
 
-    const paths = skyPaths.map((pathData, idx) => ({
-      id: pathData.id,
-      points: pathData.points,
-      color: colors[idx % colors.length],
-    }));
+    try {
+      console.log('[SkyPathView] Updating paths, skyPaths:', skyPaths);
 
-    pathLayerRef.current.updatePaths(paths);
+      const paths = skyPaths.map((pathData, idx) => ({
+        id: pathData.id,
+        points: pathData.points,
+        color: colors[idx % colors.length],
+      }));
+
+      console.log('[SkyPathView] Calling updatePaths with', paths.length, 'paths');
+      pathLayerRef.current.updatePaths(paths);
+    } catch (err) {
+      console.error('[SkyPathView] Error updating paths:', err);
+      setError(`Failed to update paths: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   }, [skyPaths, colors]);
 
   // Mouse event handlers
