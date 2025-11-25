@@ -1,4 +1,5 @@
 import { llmResponseEnvelopeSchema, type LLMResponseEnvelope, type PipelineStage, type DesignDomain } from "@shared/generative-design-schema";
+import { getOpenAIKey } from "./secrets";
 
 // ============================================================================
 // LLM SYSTEM PROMPT TEMPLATE
@@ -215,8 +216,8 @@ export interface LLMCallOptions {
 export async function callTelescopeDesignLLM(options: LLMCallOptions): Promise<LLMResponseEnvelope> {
   const { userMessage, conversationHistory = [], currentStage, currentDomain } = options;
 
-  // Check for API key
-  const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY;
+  // Check for API key (from secrets system or environment)
+  const apiKey = getOpenAIKey() || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.warn("⚠️  No LLM API key found. Returning mock response.");
     return createMockLLMResponse(userMessage, currentStage, currentDomain);
@@ -231,7 +232,7 @@ export async function callTelescopeDesignLLM(options: LLMCallOptions): Promise<L
     ];
 
     // Determine which API to use
-    const isAnthropic = !!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY;
+    const isAnthropic = !!process.env.ANTHROPIC_API_KEY && !getOpenAIKey();
 
     let rawResponse: string;
 
@@ -265,7 +266,7 @@ export async function callTelescopeDesignLLM(options: LLMCallOptions): Promise<L
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Authorization": `Bearer ${getOpenAIKey()}`,
         },
         body: JSON.stringify({
           model: process.env.OPENAI_MODEL || "gpt-4o",
