@@ -17,6 +17,29 @@ import { z } from "zod";
 
 // ===== SKY VISUALIZERS SCHEMA =====
 
+// Star Catalog Table
+export const starCatalog = pgTable(
+  "skyviz_star_catalog",
+  {
+    id: serial("id").primaryKey(),
+    hip: integer("hip").unique(), // Hipparcos number
+    tycho: varchar("tycho", { length: 32 }), // Tycho designation
+    ra: real("ra").notNull(), // Right Ascension (degrees)
+    dec: real("dec").notNull(), // Declination (degrees)
+    magnitude: real("magnitude").notNull(), // V Magnitude
+    bv: real("bv"), // B-V Color Index
+    properName: varchar("proper_name", { length: 128 }),
+    bayer: varchar("bayer", { length: 32 }),
+    flamsteed: varchar("flamsteed", { length: 32 }),
+    constellation: varchar("constellation", { length: 3 }),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    magIdx: index("skyviz_star_mag_idx").on(table.magnitude),
+    posIdx: index("skyviz_star_pos_idx").on(table.ra, table.dec),
+  })
+);
+
 // Object type enum
 export const solarSystemObjectTypeEnum = pgEnum("sso_type", [
   "planet",
@@ -236,3 +259,9 @@ export type OrbitalData = typeof orbitalData.$inferSelect;
 export type TrajectoryCache = typeof trajectoryCache.$inferSelect;
 export type SkyPathCache = typeof skyPathCache.$inferSelect;
 export type VisualizationAsset = typeof visualizationAsset.$inferSelect;
+export type StarCatalog = typeof starCatalog.$inferSelect;
+
+export const insertStarCatalogSchema = createInsertSchema(starCatalog).omit({
+  id: true,
+  updatedAt: true,
+});

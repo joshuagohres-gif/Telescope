@@ -406,6 +406,34 @@ export function createSkyVisualizersRouter(): express.Router {
   });
 
   /**
+   * GET /sky-visualizers/stars
+   * Get bright stars catalog
+   * Query params:
+   *   - limit: Number of stars to return (default: 500)
+   */
+  router.get("/sky-visualizers/stars", async (req, res) => {
+    try {
+      const limit = req.query.limit
+        ? parseInt(req.query.limit as string, 10)
+        : 500;
+      
+      const stars = await skyVisualizersStorage.getStars(limit);
+      
+      res.json(
+        wrapResponse(stars, {
+          count: stars.length,
+        })
+      );
+    } catch (error: any) {
+      console.error("Error fetching stars:", error);
+      res.status(500).json({
+        error: "Failed to fetch stars",
+        message: error.message,
+      });
+    }
+  });
+
+  /**
    * GET /sky-visualizers/assets/:object_id
    * Get visualization assets for an object
    */
