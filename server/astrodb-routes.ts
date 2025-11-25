@@ -1,10 +1,10 @@
 import type { Express, Request, Response } from "express";
-import { storage } from "./astrodb-storage";
+import { astroDbStorage } from "./astrodb-storage";
 import { mockAstroDbStorage } from "./astrodb-storage-mock";
 import { computeSatellitePasses } from "./services/satellite-passes";
 
 // Use mock storage if no database URL is configured
-const storage = process.env.DATABASE_URL ? storage : mockAstroDbStorage;
+const storage = process.env.DATABASE_URL ? astroDbStorage : mockAstroDbStorage;
 
 // Feature flag check middleware
 const checkFeatureFlag = (req: Request, res: Response, next: any) => {

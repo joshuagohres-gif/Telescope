@@ -13,11 +13,13 @@ import {
   imagingSequenceFrames
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzleNode } from "drizzle-orm/node-postgres";
+import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless";
+import pg from "pg";
 import { eq, desc } from "drizzle-orm";
 import ws from "ws";
-import { calculateSolarSystemPosition, isSolarSystemObject } from "./lib/astro/planets";
+import { calculateSolarSystemPosition, isSolarSystemObject, isPlanet, calculatePlanetPosition } from "./lib/astro/planets";
 
 neonConfig.webSocketConstructor = ws as any;
 
@@ -230,8 +232,19 @@ export class DbStorage implements IStorage {
   private initialized = false;
 
   constructor() {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    this.db = drizzle(pool);
+    const databaseUrl = process.env.DATABASE_URL;
+    const isNeonDatabase = databaseUrl?.includes('neon.tech') || databaseUrl?.includes('.neon.') || false;
+
+    if (isNeonDatabase) {
+      // Use Neon serverless driver for Neon databases
+      const pool = new NeonPool({ connectionString: databaseUrl });
+      this.db = drizzleNeon(pool);
+    } else {
+      // Use standard PostgreSQL driver for local databases
+      const { Pool } = pg;
+      const pool = new Pool({ connectionString: databaseUrl });
+      this.db = drizzleNode(pool);
+    }
   }
 
   async initialize(): Promise<void> {

@@ -1,35 +1,47 @@
 {
-  "timestamp": "2025-11-08T03:28:59.167904",
+  "timestamp": "2025-11-20T17:41:39.124334",
   "root": "C:\\Users\\Joshu\\Telescope",
   "totals": {
-    "loc": 18656,
-    "sloc": 15240,
-    "files": 111
+    "loc": 69311,
+    "sloc": 50507,
+    "files": 302
   },
   "by_language": [
     {
       "language": "TypeScript",
-      "files": 97,
-      "loc": 16975,
-      "sloc": 14765
+      "files": 245,
+      "loc": 55964,
+      "sloc": 47966
     },
     {
       "language": "Markdown",
-      "files": 7,
-      "loc": 1062,
+      "files": 32,
+      "loc": 9890,
       "sloc": 0
     },
     {
       "language": "Python",
-      "files": 2,
-      "loc": 384,
-      "sloc": 240
+      "files": 9,
+      "loc": 2344,
+      "sloc": 1579
     },
     {
       "language": "JSON",
-      "files": 4,
-      "loc": 229,
-      "sloc": 229
+      "files": 8,
+      "loc": 535,
+      "sloc": 535
+    },
+    {
+      "language": "Shell",
+      "files": 5,
+      "loc": 455,
+      "sloc": 320
+    },
+    {
+      "language": "YAML",
+      "files": 2,
+      "loc": 117,
+      "sloc": 101
     },
     {
       "language": "JavaScript",
@@ -40,37 +52,37 @@
   ],
   "excluded": {
     "patterns": [
-      ".next",
-      ".venv",
-      ".DS_Store",
-      "dist",
-      "coverage",
-      "node_modules",
-      ".idea",
-      "*.swp",
-      "generated",
-      "logs",
-      ".cache",
-      ".git",
-      "build",
-      "*.log",
-      "Thumbs.db",
-      ".vscode",
-      "pnpm-lock.yaml",
-      "*.tsbuildinfo",
+      "out",
       "*~",
+      "*.min.*",
+      "dist",
+      ".venv",
+      "package-lock.json",
+      ".vscode",
+      "build",
+      "logs",
+      "generated",
+      ".cache",
+      "*.tsbuildinfo",
+      "*.log",
+      "yarn.lock",
+      "node_modules",
+      "Thumbs.db",
       "*.bundle.*",
-      ".turbo",
+      "migrations",
       "*.swo",
       "venv",
-      "migrations",
-      "*.lock",
-      "proto",
-      "package-lock.json",
-      "out",
+      ".idea",
+      ".next",
+      ".git",
       "__pycache__",
-      "*.min.*",
-      "yarn.lock"
+      "pnpm-lock.yaml",
+      ".turbo",
+      "coverage",
+      "*.lock",
+      ".DS_Store",
+      "*.swp",
+      "proto"
     ],
     "paths_count": 0
   }

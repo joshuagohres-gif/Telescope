@@ -1,9 +1,10 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import { 
-  eq, desc, and, or, sql, lte, gte, like, inArray, isNull, between, asc 
+import "dotenv/config";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+const { Pool } = pg;
+import {
+  eq, desc, and, or, sql, lte, gte, like, inArray, isNull, between, asc
 } from "drizzle-orm";
-import ws from "ws";
 import {
   manufacturer,
   device,
@@ -26,8 +27,6 @@ import {
   type Event,
   type ImportRun,
 } from "@shared/astrodb-schema";
-
-neonConfig.webSocketConstructor = ws as any;
 
 export interface DeviceWithDetails extends Device {
   manufacturer?: { name: string; website: string | null };

@@ -40,7 +40,8 @@ import {
   Menu,
   Globe,
   Database,
-  Ruler
+  Ruler,
+  Orbit
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -126,6 +127,16 @@ export default function Dashboard() {
               >
                 <Ruler className="w-4 h-4" />
                 <span>Design Knowledge Base</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/sky-visualizers");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Orbit className="w-4 h-4" />
+                <span>Sky Visualizers</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-2 py-1.5">

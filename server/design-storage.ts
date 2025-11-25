@@ -1,7 +1,8 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import "dotenv/config";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+const { Pool } = pg;
 import { eq, desc, and, or, sql, lte, gte, like, between, asc, inArray } from "drizzle-orm";
-import ws from "ws";
 import {
   concept,
   equation,
@@ -18,8 +19,6 @@ import {
   type DimensionedExample,
   type Procedure,
 } from "@shared/design-schema";
-
-neonConfig.webSocketConstructor = ws as any;
 
 export interface ConceptWithXrefs extends Concept {
   relatedEquations?: number[];

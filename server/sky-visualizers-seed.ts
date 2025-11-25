@@ -3,6 +3,7 @@
  * Populates database with initial solar system objects and orbital data
  */
 
+import 'dotenv/config';
 import { skyVisualizersStorage } from "./sky-visualizers-storage";
 
 const J2000 = 2451545.0;
@@ -247,15 +248,13 @@ export async function seedSkyVisualizers() {
   console.log("✓ Sky Visualizers seeding complete!");
 }
 
-// Run if called directly
-if (require.main === module) {
-  seedSkyVisualizers()
-    .then(() => {
-      console.log("Done!");
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error("Error seeding:", err);
-      process.exit(1);
-    });
-}
+// Run seed
+seedSkyVisualizers()
+  .then(() => {
+    console.log("Done!");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("Error seeding:", err);
+    process.exit(1);
+  });
