@@ -184,9 +184,15 @@ export class StaticSkyImageLayer implements RenderLayer {
 
     // Get image URL from config or environment variable
     const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
-    this.imageUrl = config.imageUrl || 
+    this.imageUrl = config.imageUrl ||
                     (env.VITE_SKY_IMAGE_URL as string | undefined) ||
                     undefined; // No default - will show fallback gradient if not provided
+
+    console.log('[StaticSkyImageLayer] Constructor called');
+    console.log('[StaticSkyImageLayer] Config imageUrl:', config.imageUrl);
+    console.log('[StaticSkyImageLayer] import.meta.env:', import.meta?.env);
+    console.log('[StaticSkyImageLayer] VITE_SKY_IMAGE_URL:', env.VITE_SKY_IMAGE_URL);
+    console.log('[StaticSkyImageLayer] Final imageUrl:', this.imageUrl);
 
     this.initialize();
   }
@@ -212,7 +218,10 @@ export class StaticSkyImageLayer implements RenderLayer {
   }
 
   render(ctx: RenderContext): void {
-    if (!this.program || !this.vao) return;
+    if (!this.program || !this.vao) {
+      console.warn('[StaticSkyImageLayer] Render skipped - program or VAO not initialized');
+      return;
+    }
 
     const { gl } = this;
 

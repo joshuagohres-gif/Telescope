@@ -106,6 +106,13 @@ export function SkyPathView({
 
       // Create render layers
       const skyDome = new SkyDome(gl);
+
+      console.log('[SkyPathView] Creating StaticSkyImageLayer with:', {
+        latitude: observerLat,
+        longitude: observerLon,
+        time: startDate,
+      });
+
       const staticSkyLayer = new StaticSkyImageLayer(gl, {
         latitude: observerLat,
         longitude: observerLon,
