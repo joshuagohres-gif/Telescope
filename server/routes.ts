@@ -24,6 +24,7 @@ import { createSkyVisualizersRouter } from "./sky-visualizers-routes";
 import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled, isSkymapEnabled } from "./astrodb-api/config/flags";
 import { registerDocsRoute } from "./astrodb-api/docs";
 import cadGenerativeRoutes from "./cad-generative-routes";
+import { registerGenerativeDesignRoutes } from "./generative-design-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -207,6 +208,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register CAD Generative routes
   app.use("/api/cad", cadGenerativeRoutes);
+
+  // Register Generative Telescope Design routes
+  registerGenerativeDesignRoutes(app);
 
   // Conditionally mount pack routers based on feature flags
   const astrodbRouter = express.Router();

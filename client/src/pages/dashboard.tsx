@@ -41,7 +41,8 @@ import {
   Globe,
   Database,
   Ruler,
-  Orbit
+  Orbit,
+  Sparkles
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -137,6 +138,16 @@ export default function Dashboard() {
               >
                 <Orbit className="w-4 h-4" />
                 <span>Sky Visualizers</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/generative-design");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Generative Design (AI)</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-2 py-1.5">

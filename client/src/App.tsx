@@ -13,6 +13,7 @@ import AstroDB from "@/pages/astrodb";
 import DesignKB from "@/pages/design";
 import LiquidGlassDemo from "@/pages/LiquidGlassDemo";
 import SkyVisualizers from "@/pages/sky-visualizers";
+import GenerativeDesign from "@/pages/generative-design";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/design" component={DesignKB} />
       <Route path="/liquid-glass" component={LiquidGlassDemo} />
       <Route path="/sky-visualizers" component={SkyVisualizers} />
+      <Route path="/generative-design" component={GenerativeDesign} />
       <Route component={NotFound} />
     </Switch>
   );
