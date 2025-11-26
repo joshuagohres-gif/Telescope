@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useGenerativeDesign } from "@/hooks/use-generative-design";
 import type { DesignTurn, LLMResponseEnvelope, BomItem, StageTransition } from "@shared/generative-design-schema";
 import { 
@@ -19,10 +27,23 @@ import {
   Telescope,
   AlertCircle,
   Package,
-  Settings
+  Settings,
+  Menu,
+  MapPin,
+  Lightbulb,
+  Wrench,
+  Globe,
+  Database,
+  Ruler,
+  Orbit,
+  Sparkles,
+  Home
 } from "lucide-react";
 
 export function GenerativeDesignInterface() {
+  const [location, navigate] = useLocation();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  
   const {
     sessions,
     currentSession,
@@ -107,24 +128,123 @@ export function GenerativeDesignInterface() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Left Sidebar - Sessions List */}
-      <div className="w-80 border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Telescope className="w-5 h-5" />
-              Design Sessions
-            </h2>
-            <Button
-              size="sm"
-              onClick={() => setShowNewSessionDialog(true)}
-              className="gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New
-            </Button>
-          </div>
+    <div className="flex flex-col h-screen bg-background">
+      {/* Header with Navigation */}
+      <header className="border-b border-border bg-card">
+        <div className="px-4 py-3 flex items-center justify-between gap-4">
+          <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex items-center gap-3 px-2 hover:bg-accent">
+                <Sparkles className="w-6 h-6 text-primary" />
+                <h1 className="text-xl font-semibold">AI Design Sessions</h1>
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Home className="w-4 h-4" />
+                <span>Dashboard</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/operations");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>Operations</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/planqa");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Lightbulb className="w-4 h-4" />
+                <span>Plan & QA</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/calibration");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Wrench className="w-4 h-4" />
+                <span>Calibration</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/skymap");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Community Sky Map</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/astrodb");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Database className="w-4 h-4" />
+                <span>AstroDB - Equipment & Catalog</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/design");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Ruler className="w-4 h-4" />
+                <span>Design Knowledge Base</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/sky-visualizers");
+                  setIsDropdownOpen(false);
+                }}
+                className="cursor-pointer gap-2"
+              >
+                <Orbit className="w-4 h-4" />
+                <span>Sky Visualizers</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar - Sessions List */}
+        <div className="w-80 border-r border-border flex flex-col">
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Telescope className="w-5 h-5" />
+                Sessions
+              </h2>
+              <Button
+                size="sm"
+                onClick={() => setShowNewSessionDialog(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                New
+              </Button>
+            </div>
 
           {showNewSessionDialog && (
             <Card className="p-4 space-y-3">
@@ -208,10 +328,10 @@ export function GenerativeDesignInterface() {
             )}
           </div>
         </ScrollArea>
-      </div>
+        </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+        {/* Center Content Area */}
+        <div className="flex-1 flex flex-col">
         {selectedSessionId && currentSession ? (
           <>
             {/* Header */}
@@ -290,23 +410,24 @@ export function GenerativeDesignInterface() {
             <span className="text-sm">{error}</span>
           </div>
         )}
-      </div>
-
-      {/* Right Sidebar - Design Details */}
-      {selectedSessionId && currentSession && (
-        <div className="w-96 border-l border-border flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Design Details
-            </h2>
-          </div>
-
-          <ScrollArea className="flex-1 p-4">
-            <DesignDetailsPanel session={currentSession} />
-          </ScrollArea>
         </div>
-      )}
+
+        {/* Right Sidebar - Design Details */}
+        {selectedSessionId && currentSession && (
+          <div className="w-96 border-l border-border flex flex-col">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Design Details
+              </h2>
+            </div>
+
+            <ScrollArea className="flex-1 p-4">
+              <DesignDetailsPanel session={currentSession} />
+            </ScrollArea>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
