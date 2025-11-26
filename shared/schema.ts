@@ -3,6 +3,79 @@ import { pgTable, text, varchar, timestamp, real, boolean, integer } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ============== AUTHENTICATION ==============
+
+// Users table for account management
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: text("password_hash"), // null for OAuth-only users
+  displayName: varchar("display_name", { length: 200 }),
+  avatarUrl: text("avatar_url"),
+  // OAuth fields
+  googleId: varchar("google_id", { length: 255 }).unique(),
+  // Account status
+  isActive: boolean("is_active").notNull().default(true),
+  isEmailVerified: boolean("is_email_verified").notNull().default(false),
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+
+// Public user profile (without sensitive fields)
+export type PublicUser = Pick<User, 'id' | 'username' | 'displayName' | 'avatarUrl' | 'createdAt'>;
+
+// Sessions table for persistent login
+export const sessions = pgTable("sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 512 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  userAgent: text("user_agent"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertSessionSchema = createInsertSchema(sessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessions.$inferSelect;
+
+// Auth-related Zod schemas for validation
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(50, "Username must be at most 50 characters")
+    .regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain letters, numbers, underscores, and hyphens"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .max(100, "Password must be at most 100 characters"),
+  displayName: z.string().max(200).optional(),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+
 // Telescope Commands
 export const commands = pgTable("commands", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

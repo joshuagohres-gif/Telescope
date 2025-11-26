@@ -1,10 +1,16 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeStorage } from "./storage";
+import { initializeAuthStorage } from "./auth-storage";
+import { getSessionSecret } from "./secrets";
 
 const app = express();
+
+// Cookie parser for auth tokens
+app.use(cookieParser(getSessionSecret()));
 
 declare module 'http' {
   interface IncomingMessage {
@@ -51,6 +57,9 @@ app.use((req, res, next) => {
 (async () => {
   // Initialize database storage before registering routes
   await initializeStorage();
+  
+  // Initialize auth storage
+  initializeAuthStorage();
   
   const server = await registerRoutes(app);
 

@@ -24,6 +24,7 @@ import { ConnectionToggle } from "@/components/telescope/connection-toggle";
 import { EmergencyControls } from "@/components/telescope/emergency-controls";
 import { DeviceDiscovery } from "@/components/telescope/device-discovery";
 import { LocationControl } from "@/components/telescope/location-control";
+import { UserMenu } from "@/components/auth/user-menu";
 import { useStarField } from "@/hooks/use-star-field";
 import { ConstellationBackground } from "@/components/ui/constellation-background";
 import {
@@ -159,6 +160,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <ConnectionToggle />
             <EmergencyControls />
+            <UserMenu />
           </div>
         </div>
       </header>
