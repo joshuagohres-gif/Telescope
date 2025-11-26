@@ -6,6 +6,7 @@
 
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { authStorage } from "./auth-storage";
+import { secureAccountStorage } from "./secure-account-storage";
 import { registerSchema, loginSchema, type User, type PublicUser } from "@shared/schema";
 import { getGoogleClientId, getGoogleClientSecret, isGoogleOAuthConfigured, getSessionSecret } from "./secrets";
 import { z } from "zod";
@@ -58,6 +59,80 @@ function getPublicUserData(user: User): PublicUser & { email: string; isEmailVer
     isEmailVerified: user.isEmailVerified,
     createdAt: user.createdAt,
   };
+}
+
+/**
+ * Sync user to secure account system
+ * Creates a secure account if one doesn't exist, ensuring data consistency
+ */
+async function syncToSecureAccount(user: User, password?: string, context?: {
+  ipAddress?: string;
+  userAgent?: string;
+  isNewRegistration?: boolean;
+}): Promise<void> {
+  try {
+    // Check if secure account already exists
+    let secureAccount = await secureAccountStorage.getAccountByEmail(user.email);
+    
+    if (!secureAccount) {
+      // Create secure account
+      secureAccount = await secureAccountStorage.createAccount({
+        email: user.email,
+        username: user.username,
+        password: password, // Will be hashed if provided
+        displayName: user.displayName ?? undefined,
+        avatarUrl: user.avatarUrl ?? undefined,
+        googleId: user.googleId ?? undefined,
+        isEmailVerified: user.isEmailVerified,
+        marketingOptIn: false,
+        analyticsOptIn: true,
+      });
+      
+      // Record initial consent for new accounts
+      if (context?.isNewRegistration) {
+        await secureAccountStorage.recordConsent({
+          userId: secureAccount.id,
+          consentType: "terms_of_service",
+          version: "1.0",
+          isGranted: true,
+          grantedAt: new Date(),
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          legalBasis: "contract",
+        });
+        
+        await secureAccountStorage.recordConsent({
+          userId: secureAccount.id,
+          consentType: "privacy_policy",
+          version: "1.0",
+          isGranted: true,
+          grantedAt: new Date(),
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+          legalBasis: "contract",
+        });
+      }
+      
+      console.log(`[Auth] Created secure account for user ${user.email}`);
+    }
+    
+    // Log the security event
+    const eventType = context?.isNewRegistration ? "account_created" : "login_success";
+    await secureAccountStorage.logSecurityEvent({
+      userId: secureAccount.id,
+      actorType: "user",
+      eventType,
+      eventCategory: "authentication",
+      ipAddress: context?.ipAddress,
+      userAgent: context?.userAgent,
+      success: true,
+      riskLevel: "low",
+      requiresReview: false,
+    });
+  } catch (error) {
+    // Don't fail the main operation if sync fails
+    console.error("[Auth] Error syncing to secure account:", error);
+  }
 }
 
 // ==================== MIDDLEWARE ====================
@@ -168,6 +243,13 @@ router.post("/register", async (req, res) => {
     // Set cookie
     setAuthCookie(res, session.token);
 
+    // Sync to secure account system
+    await syncToSecureAccount(user, password, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      isNewRegistration: true,
+    });
+
     res.status(201).json({
       message: "Account created successfully",
       user: getPublicUserData(user),
@@ -223,6 +305,13 @@ router.post("/login", async (req, res) => {
 
     // Set cookie
     setAuthCookie(res, session.token);
+
+    // Sync to secure account system
+    await syncToSecureAccount(user, undefined, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      isNewRegistration: false,
+    });
 
     res.json({
       message: "Logged in successfully",
@@ -395,6 +484,13 @@ router.get("/google/callback", async (req, res) => {
 
     // Set cookie
     setAuthCookie(res, session.token);
+
+    // Sync to secure account system
+    await syncToSecureAccount(user, undefined, {
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      isNewRegistration: false,
+    });
 
     // Redirect to app
     res.redirect("/?auth_success=google");

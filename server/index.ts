@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeStorage } from "./storage";
 import { initializeAuthStorage } from "./auth-storage";
+import { initializeSecureAccountStorage } from "./secure-account-storage";
 import { getSessionSecret } from "./secrets";
 
 const app = express();
@@ -60,6 +61,9 @@ app.use((req, res, next) => {
   
   // Initialize auth storage
   initializeAuthStorage();
+  
+  // Initialize secure account storage (enhanced auth with privacy features)
+  initializeSecureAccountStorage();
   
   const server = await registerRoutes(app);
 
