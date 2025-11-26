@@ -16,6 +16,7 @@ export default defineConfig({
     "./shared/planqa-schema.ts",
     "./shared/sky-visualizers-schema.ts",
     "./shared/generative-design-schema.ts",
+    "./shared/secure-account-schema.ts",
   ],
   dialect: "postgresql",
   dbCredentials: {

@@ -26,6 +26,8 @@ import { registerDocsRoute } from "./astrodb-api/docs";
 import cadGenerativeRoutes from "./cad-generative-routes";
 import { registerGenerativeDesignRoutes } from "./generative-design-routes";
 import authRoutes, { authMiddleware } from "./auth-routes";
+import secureAccountRoutes from "./secure-account-routes";
+import { secureAccountStorage } from "./secure-account-storage";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -204,8 +206,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply auth middleware to all routes
   app.use(authMiddleware);
   
+  // Bridge middleware: Link existing auth user to secure account system
+  app.use(async (req, res, next) => {
+    if (req.user) {
+      try {
+        // Try to find corresponding secure account
+        const secureAccount = await secureAccountStorage.getAccountByEmail(req.user.email);
+        if (secureAccount) {
+          req.secureAccount = secureAccount;
+          // Update last activity
+          await secureAccountStorage.updateLastActivity(secureAccount.id).catch(() => {});
+        }
+      } catch (error) {
+        // Don't block requests if secure account lookup fails
+        console.error("[SecureAccount] Bridge middleware error:", error);
+      }
+    }
+    next();
+  });
+  
   // Register auth routes
   app.use("/api/auth", authRoutes);
+  
+  // Register secure account routes (enhanced account management with privacy features)
+  app.use("/api/secure-account", secureAccountRoutes);
 
   // Register AstroDB routes (feature-flagged)
   registerAstroDbRoutes(app);
