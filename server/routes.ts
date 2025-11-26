@@ -25,6 +25,7 @@ import { isOpsEnabled, isTargetsEnabled, isCalibEnabled, isPlanqaEnabled, isSkym
 import { registerDocsRoute } from "./astrodb-api/docs";
 import cadGenerativeRoutes from "./cad-generative-routes";
 import { registerGenerativeDesignRoutes } from "./generative-design-routes";
+import authRoutes, { authMiddleware } from "./auth-routes";
 import type { SystemStatus } from "@shared/schema";
 
 // Active telescope connection
@@ -199,6 +200,12 @@ function stopStatusBroadcast() {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // Apply auth middleware to all routes
+  app.use(authMiddleware);
+  
+  // Register auth routes
+  app.use("/api/auth", authRoutes);
 
   // Register AstroDB routes (feature-flagged)
   registerAstroDbRoutes(app);

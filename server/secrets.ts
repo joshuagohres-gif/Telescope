@@ -20,6 +20,13 @@ interface Secrets {
   database: {
     url: string;
   };
+  auth: {
+    sessionSecret: string;
+    google: {
+      clientId: string | null;
+      clientSecret: string | null;
+    };
+  };
 }
 
 let cachedSecrets: Secrets | null = null;
@@ -71,12 +78,30 @@ export function getSecrets(): Secrets {
         || fileSecrets.database?.url
         || 'postgresql://postgres@127.0.0.1:5432/telescope',
     },
+    auth: {
+      // Session secret for signing cookies/tokens
+      sessionSecret: process.env.SESSION_SECRET
+        || fileSecrets.auth?.sessionSecret
+        || 'telescope-control-dev-secret-change-in-production',
+      google: {
+        // Google OAuth credentials (null = disabled)
+        // Get these from: https://console.cloud.google.com/apis/credentials
+        clientId: process.env.GOOGLE_CLIENT_ID
+          || fileSecrets.auth?.google?.clientId
+          || null,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET
+          || fileSecrets.auth?.google?.clientSecret
+          || null,
+      },
+    },
   };
 
   // Log which secrets are configured (without showing values)
   console.log('[Secrets] Configuration:');
   console.log(`  - OpenAI API Key: ${cachedSecrets.openai.apiKey ? '✓ configured' : '✗ not configured (using mock mode)'}`);
   console.log(`  - Database URL: ${cachedSecrets.database.url ? '✓ configured' : '✗ using default'}`);
+  console.log(`  - Session Secret: ${cachedSecrets.auth.sessionSecret !== 'telescope-control-dev-secret-change-in-production' ? '✓ configured' : '⚠ using dev default'}`);
+  console.log(`  - Google OAuth: ${cachedSecrets.auth.google.clientId ? '✓ configured' : '✗ not configured (Google sign-in disabled)'}`);
 
   return cachedSecrets;
 }
@@ -101,6 +126,37 @@ export function getDatabaseURL(): string {
  */
 export function isOpenAIConfigured(): boolean {
   return getOpenAIKey() !== null;
+}
+
+/**
+ * Get session secret for signing cookies/tokens
+ */
+export function getSessionSecret(): string {
+  return getSecrets().auth.sessionSecret;
+}
+
+/**
+ * Get Google OAuth client ID
+ * Returns null if not configured
+ */
+export function getGoogleClientId(): string | null {
+  return getSecrets().auth.google.clientId;
+}
+
+/**
+ * Get Google OAuth client secret
+ * Returns null if not configured
+ */
+export function getGoogleClientSecret(): string | null {
+  return getSecrets().auth.google.clientSecret;
+}
+
+/**
+ * Check if Google OAuth is configured
+ */
+export function isGoogleOAuthConfigured(): boolean {
+  const secrets = getSecrets();
+  return secrets.auth.google.clientId !== null && secrets.auth.google.clientSecret !== null;
 }
 
 /**
