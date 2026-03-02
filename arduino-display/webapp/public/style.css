@@ -1,0 +1,243 @@
+/* ── Reset & base ─────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  background: #0f0f1a;
+  color: #e0e0e8;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+/* ── Layout ──────────────────────────────────────────────── */
+.container {
+  width: 100%;
+  max-width: 480px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+header h1 {
+  font-size: 1.5rem;
+  color: #7eb8ff;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: #888;
+  margin-top: 0.25rem;
+}
+
+/* ── Cards ───────────────────────────────────────────────── */
+.card {
+  background: #1a1a2e;
+  border: 1px solid #2a2a40;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Input row ───────────────────────────────────────────── */
+.input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-row input {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #3a3a55;
+  border-radius: 8px;
+  background: #12121f;
+  color: #e0e0e8;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-row input:focus {
+  border-color: #7eb8ff;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+button {
+  cursor: pointer;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+#check-btn {
+  background: #2d4a7a;
+  color: #c8ddf8;
+}
+
+#check-btn:hover {
+  background: #3a5f9a;
+}
+
+.outline-btn {
+  background: transparent;
+  border: 1px solid #3a3a55;
+  color: #bbb;
+}
+
+.outline-btn:hover {
+  border-color: #7eb8ff;
+  color: #7eb8ff;
+}
+
+.send-btn {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: #1a6b3c;
+  color: #b9f5d0;
+  border-radius: 10px;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: #228a4e;
+}
+
+.send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Drop zone ───────────────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed #3a3a55;
+  border-radius: 12px;
+  padding: 2rem 1rem;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.drop-zone.dragover {
+  border-color: #7eb8ff;
+  background: rgba(126, 184, 255, 0.06);
+}
+
+.drop-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.drop-or {
+  color: #666;
+  font-size: 0.8rem;
+  margin: 0.4rem 0;
+}
+
+/* ── Options row ─────────────────────────────────────────── */
+.options-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.options-row label {
+  font-size: 0.85rem;
+  color: #999;
+  white-space: nowrap;
+}
+
+.options-row select {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #3a3a55;
+  border-radius: 8px;
+  background: #12121f;
+  color: #e0e0e8;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+/* ── Preview ─────────────────────────────────────────────── */
+.preview-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+#preview-canvas {
+  border: 1px solid #2a2a40;
+  border-radius: 6px;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+/* ── Status ──────────────────────────────────────────────── */
+.status {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  min-height: 1.2em;
+}
+
+.status.success {
+  color: #5fdd7d;
+}
+
+.status.error {
+  color: #f06060;
+}
+
+.status.pending {
+  color: #d0a050;
+}
+
+/* ── Status bar ──────────────────────────────────────────── */
+.status-bar {
+  display: none;
+  margin-top: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.status-bar.info {
+  background: #1a2a3e;
+  color: #7eb8ff;
+}
+
+.status-bar.success {
+  background: #1a3e28;
+  color: #5fdd7d;
+}
+
+.status-bar.error {
+  background: #3e1a1a;
+  color: #f06060;
+}
+
+.status-bar.pending {
+  background: #3e351a;
+  color: #d0a050;
+}

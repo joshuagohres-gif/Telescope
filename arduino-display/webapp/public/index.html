@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arduino Display Manager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Arduino Display Manager</h1>
+      <p class="subtitle">Upload images to your Waveshare 1.69" LCD (240 x 280)</p>
+    </header>
+
+    <!-- Device connection -->
+    <section class="card">
+      <h2>Device Connection</h2>
+      <div class="input-row">
+        <input
+          type="text"
+          id="arduino-ip"
+          placeholder="192.168.1.100"
+          aria-label="Arduino IP address"
+        />
+        <button id="check-btn">Check</button>
+      </div>
+      <span id="connection-status" class="status"></span>
+    </section>
+
+    <!-- Image upload -->
+    <section class="card">
+      <h2>Upload Image</h2>
+      <div id="drop-zone" class="drop-zone">
+        <p class="drop-icon">&#128247;</p>
+        <p>Drag &amp; drop an image here</p>
+        <p class="drop-or">or</p>
+        <button id="browse-btn" class="outline-btn">Browse Files</button>
+        <input type="file" id="file-input" accept="image/*" hidden />
+      </div>
+
+      <div class="options-row">
+        <label for="fit-mode">Fit mode</label>
+        <select id="fit-mode">
+          <option value="contain">Contain (letterbox)</option>
+          <option value="cover">Cover (crop)</option>
+          <option value="fill">Stretch to fill</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Preview + send -->
+    <section id="preview-section" class="card" style="display: none">
+      <h2>Preview</h2>
+      <div class="preview-wrapper">
+        <canvas id="preview-canvas" width="240" height="280"></canvas>
+      </div>
+      <button id="send-btn" class="send-btn" disabled>Send to Display</button>
+    </section>
+
+    <!-- Status bar -->
+    <div id="status-bar" class="status-bar"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
