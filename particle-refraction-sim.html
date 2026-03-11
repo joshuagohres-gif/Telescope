@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Particle Fluid Refraction Simulation</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a0f;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+h1 {
+  margin: 12px 0 4px;
+  font-size: 18px;
+  color: #8af;
+  letter-spacing: 2px;
+}
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 16px;
+  justify-content: center;
+  max-width: 900px;
+}
+#controls label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  gap: 2px;
+}
+#controls input[type=range] { width: 100px; }
+#controls button {
+  background: #335;
+  color: #adf;
+  border: 1px solid #558;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+#controls button:hover { background: #447; }
+.canvas-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+canvas {
+  border: 1px solid #224;
+  background: #000;
+}
+#info {
+  font-size: 11px;
+  color: #668;
+  padding: 4px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<h1>STAT-MECH FLUID + RAY-TRACED REFRACTION</h1>
+<div id="controls">
+  <label>Temperature <span id="vTemp">1.0</span>
+    <input type="range" id="sTemp" min="0.1" max="5" step="0.1" value="1.0">
+  </label>
+  <label>Particles <span id="vCount">200</span>
+    <input type="range" id="sCount" min="50" max="500" step="10" value="200">
+  </label>
+  <label>Refr. Index <span id="vIOR">1.33</span>
+    <input type="range" id="sIOR" min="1.0" max="2.5" step="0.01" value="1.33">
+  </label>
+  <label>Light Angle <span id="vAngle">30</span>&deg;
+    <input type="range" id="sAngle" min="-80" max="80" step="1" value="30">
+  </label>
+  <label>Ray Density <span id="vRays">80</span>
+    <input type="range" id="sRays" min="20" max="200" step="10" value="80">
+  </label>
+  <button id="btnReset">Reset Particles</button>
+  <button id="btnPause">Pause</button>
+</div>
+<div class="canvas-row">
+  <canvas id="simCanvas" width="520" height="520"></canvas>
+  <canvas id="rayCanvas" width="520" height="520"></canvas>
+</div>
+<div id="info">Left: Particle simulation (top-down XY slice) | Right: Ray-traced refraction (XZ cross-section view)</div>
+
+<script>
+// ============================================================
+// STATISTICAL MECHANICS FLUID DYNAMICS ENGINE
+// ============================================================
+// Particles interact via truncated Lennard-Jones potential.
+// Velocity-Verlet integration. Thermostat via Berendsen rescaling.
+// The domain is a 3D cube; we visualize top-down and side-on.
+
+const SIM = document.getElementById('simCanvas');
+const RAY = document.getElementById('rayCanvas');
+const sCtx = SIM.getContext('2d');
+const rCtx = RAY.getContext('2d');
+const W = SIM.width, H = SIM.height;
+
+// --- Simulation parameters ---
+let params = {
+  N: 200,
+  T: 1.0,        // target temperature (reduced units)
+  dt: 0.003,     // timestep
+  boxL: 16.0,    // box side length (reduced units)
+  sigma: 1.0,    // LJ sigma
+  epsilon: 1.0,  // LJ epsilon
+  rCut: 2.5,     // LJ cutoff
+  ior: 1.33,     // refractive index of medium
+  lightAngle: 30,// degrees from normal
+  rayCount: 80,
+  paused: false,
+};
+
+// Particle arrays
+let px, py, pz, vx, vy, vz, fx, fy, fz;
+
+function initParticles() {
+  const N = params.N;
+  px = new Float64Array(N);
+  py = new Float64Array(N);
+  pz = new Float64Array(N);
+  vx = new Float64Array(N);
+  vy = new Float64Array(N);
+  vz = new Float64Array(N);
+  fx = new Float64Array(N);
+  fy = new Float64Array(N);
+  fz = new Float64Array(N);
+
+  const L = params.boxL;
+  // Place on a rough grid with jitter to avoid overlaps
+  const nSide = Math.ceil(Math.cbrt(N));
+  const spacing = L / nSide;
+  let idx = 0;
+  for (let ix = 0; ix < nSide && idx < N; ix++) {
+    for (let iy = 0; iy < nSide && idx < N; iy++) {
+      for (let iz = 0; iz < nSide && idx < N; iz++) {
+        px[idx] = (ix + 0.5) * spacing + (Math.random() - 0.5) * 0.3;
+        py[idx] = (iy + 0.5) * spacing + (Math.random() - 0.5) * 0.3;
+        pz[idx] = (iz + 0.5) * spacing + (Math.random() - 0.5) * 0.3;
+        idx++;
+      }
+    }
+  }
+
+  // Maxwell-Boltzmann velocities
+  const scale = Math.sqrt(params.T);
+  for (let i = 0; i < N; i++) {
+    vx[i] = gaussRandom() * scale;
+    vy[i] = gaussRandom() * scale;
+    vz[i] = gaussRandom() * scale;
+  }
+
+  // Remove net momentum
+  let mx = 0, my = 0, mz = 0;
+  for (let i = 0; i < N; i++) { mx += vx[i]; my += vy[i]; mz += vz[i]; }
+  mx /= N; my /= N; mz /= N;
+  for (let i = 0; i < N; i++) { vx[i] -= mx; vy[i] -= my; vz[i] -= mz; }
+
+  computeForces();
+}
+
+function gaussRandom() {
+  let u, v, s;
+  do {
+    u = Math.random() * 2 - 1;
+    v = Math.random() * 2 - 1;
+    s = u * u + v * v;
+  } while (s >= 1 || s === 0);
+  return u * Math.sqrt(-2 * Math.log(s) / s);
+}
+
+// --- Lennard-Jones force computation with cell lists ---
+function computeForces() {
+  const N = params.N;
+  const L = params.boxL;
+  const rc = params.rCut;
+  const rc2 = rc * rc;
+  const sig = params.sigma;
+  const eps = params.epsilon;
+
+  for (let i = 0; i < N; i++) { fx[i] = 0; fy[i] = 0; fz[i] = 0; }
+
+  for (let i = 0; i < N - 1; i++) {
+    for (let j = i + 1; j < N; j++) {
+      let dx = px[i] - px[j];
+      let dy = py[i] - py[j];
+      let dz = pz[i] - pz[j];
+
+      // Minimum image convention
+      dx -= L * Math.round(dx / L);
+      dy -= L * Math.round(dy / L);
+      dz -= L * Math.round(dz / L);
+
+      const r2 = dx * dx + dy * dy + dz * dz;
+      if (r2 < rc2 && r2 > 0.01) {
+        const sig2r2 = (sig * sig) / r2;
+        const sig6 = sig2r2 * sig2r2 * sig2r2;
+        const sig12 = sig6 * sig6;
+        const fMag = 24 * eps * (2 * sig12 - sig6) / r2;
+        const ffx = fMag * dx;
+        const ffy = fMag * dy;
+        const ffz = fMag * dz;
+        fx[i] += ffx; fy[i] += ffy; fz[i] += ffz;
+        fx[j] -= ffx; fy[j] -= ffy; fz[j] -= ffz;
+      }
+    }
+  }
+}
+
+// --- Velocity-Verlet integration + Berendsen thermostat ---
+function step() {
+  const N = params.N;
+  const dt = params.dt;
+  const L = params.boxL;
+  const halfDt = 0.5 * dt;
+
+  // Half-kick
+  for (let i = 0; i < N; i++) {
+    vx[i] += halfDt * fx[i];
+    vy[i] += halfDt * fy[i];
+    vz[i] += halfDt * fz[i];
+  }
+
+  // Drift
+  for (let i = 0; i < N; i++) {
+    px[i] += dt * vx[i];
+    py[i] += dt * vy[i];
+    pz[i] += dt * vz[i];
+    // Periodic boundary
+    px[i] = ((px[i] % L) + L) % L;
+    py[i] = ((py[i] % L) + L) % L;
+    pz[i] = ((pz[i] % L) + L) % L;
+  }
+
+  // New forces
+  computeForces();
+
+  // Half-kick
+  for (let i = 0; i < N; i++) {
+    vx[i] += halfDt * fx[i];
+    vy[i] += halfDt * fy[i];
+    vz[i] += halfDt * fz[i];
+  }
+
+  // Berendsen thermostat
+  let ke = 0;
+  for (let i = 0; i < N; i++) {
+    ke += vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i];
+  }
+  const currentT = ke / (3 * N);
+  if (currentT > 1e-8) {
+    const tau = 0.1; // coupling time
+    const lambda = Math.sqrt(1 + (dt / tau) * (params.T / currentT - 1));
+    for (let i = 0; i < N; i++) {
+      vx[i] *= lambda;
+      vy[i] *= lambda;
+      vz[i] *= lambda;
+    }
+  }
+}
+
+// ============================================================
+// DENSITY FIELD COMPUTATION
+// ============================================================
+// We bin particles into a 3D grid to get local density, then
+// derive a spatially-varying refractive index for ray tracing.
+
+const GRID = 32; // density grid resolution per axis
+let densityGrid = new Float64Array(GRID * GRID * GRID);
+
+function computeDensityGrid() {
+  const G = GRID;
+  const L = params.boxL;
+  const cellSize = L / G;
+
+  densityGrid.fill(0);
+
+  const N = params.N;
+  for (let i = 0; i < N; i++) {
+    // Trilinear splat (CIC)
+    const gx = (px[i] / L) * G;
+    const gy = (py[i] / L) * G;
+    const gz = (pz[i] / L) * G;
+
+    const ix = Math.floor(gx);
+    const iy = Math.floor(gy);
+    const iz = Math.floor(gz);
+    const fx0 = gx - ix, fy0 = gy - iy, fz0 = gz - iz;
+
+    for (let dx = 0; dx <= 1; dx++) {
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dz = 0; dz <= 1; dz++) {
+          const wx = dx ? fx0 : (1 - fx0);
+          const wy = dy ? fy0 : (1 - fy0);
+          const wz = dz ? fz0 : (1 - fz0);
+          const jx = (ix + dx) % G;
+          const jy = (iy + dy) % G;
+          const jz = (iz + dz) % G;
+          densityGrid[jx * G * G + jy * G + jz] += wx * wy * wz;
+        }
+      }
+    }
+  }
+
+  // Normalize to number density
+  const cellVol = cellSize * cellSize * cellSize;
+  for (let i = 0; i < G * G * G; i++) {
+    densityGrid[i] /= cellVol;
+  }
+}
+
+// Sample density at a continuous position using trilinear interpolation
+function sampleDensity(x, y, z) {
+  const G = GRID;
+  const L = params.boxL;
+
+  // Wrap to box
+  x = ((x % L) + L) % L;
+  y = ((y % L) + L) % L;
+  z = ((z % L) + L) % L;
+
+  const gx = (x / L) * G - 0.5;
+  const gy = (y / L) * G - 0.5;
+  const gz = (z / L) * G - 0.5;
+
+  const ix = Math.floor(gx);
+  const iy = Math.floor(gy);
+  const iz = Math.floor(gz);
+  const fxf = gx - ix, fyf = gy - iy, fzf = gz - iz;
+
+  let val = 0;
+  for (let dx = 0; dx <= 1; dx++) {
+    for (let dy = 0; dy <= 1; dy++) {
+      for (let dz = 0; dz <= 1; dz++) {
+        const wx = dx ? fxf : (1 - fxf);
+        const wy = dy ? fyf : (1 - fyf);
+        const wz = dz ? fzf : (1 - fzf);
+        const jx = ((ix + dx) % G + G) % G;
+        const jy = ((iy + dy) % G + G) % G;
+        const jz = ((iz + dz) % G + G) % G;
+        val += wx * wy * wz * densityGrid[jx * G * G + jy * G + jz];
+      }
+    }
+  }
+  return val;
+}
+
+// Local refractive index: Lorentz-Lorenz inspired mapping
+// n(r) = 1 + (n_medium - 1) * rho(r) / rho_avg
+function localIOR(x, y, z, avgDensity) {
+  const rho = sampleDensity(x, y, z);
+  const ratio = avgDensity > 0 ? rho / avgDensity : 1;
+  return 1.0 + (params.ior - 1.0) * ratio;
+}
+
+// ============================================================
+// 3D RAY TRACING WITH REFRACTION
+// ============================================================
+// Rays enter from the left planar face (x=0 plane).
+// They refract at the interface (air -> medium) using Snell's law,
+// then march through the medium, bending according to the local
+// refractive index gradient (eikonal / gradient-index ray tracing).
+
+function traceRays() {
+  const L = params.boxL;
+  const N = params.N;
+  const avgDensity = N / (L * L * L);
+  const nRays = params.rayCount;
+  const angleRad = params.lightAngle * Math.PI / 180;
+
+  // Incoming ray direction (in XZ plane, entering from the left)
+  const inDirX = Math.cos(angleRad);
+  const inDirZ = Math.sin(angleRad);
+  // inDirY = 0 (parallel rays in XZ plane)
+
+  // We trace in XZ plane for the side-view visualization, y = L/2
+  const yMid = L / 2;
+  const rays = [];
+
+  for (let i = 0; i < nRays; i++) {
+    const z0 = (i + 0.5) / nRays * L;
+    const x0 = 0;
+
+    // Snell's law at x=0 plane (normal = +x)
+    // n1 sin(theta1) = n2 sin(theta2)
+    const n1 = 1.0; // air
+    const n2 = params.ior;
+    const sinTheta1 = Math.abs(inDirZ);
+    const sinTheta2 = (n1 / n2) * sinTheta1;
+
+    let dirX, dirZ;
+    if (sinTheta2 >= 1.0) {
+      // Total internal reflection - skip
+      continue;
+    }
+    const cosTheta2 = Math.sqrt(1 - sinTheta2 * sinTheta2);
+    dirX = cosTheta2;
+    dirZ = Math.sign(inDirZ) * sinTheta2;
+
+    // Ray march through the medium using gradient-index tracing
+    const path = [];
+    let rx = x0, rz = z0;
+    let rdx = dirX, rdz = dirZ;
+    const stepSize = L / 200;
+    const maxSteps = 400;
+
+    // Add the incoming ray segment (outside the medium)
+    const incomingLen = 2.0; // length of incoming segment to show
+    path.push({
+      x: rx - inDirX * incomingLen,
+      z: z0 - inDirZ * incomingLen,
+      incoming: true
+    });
+    path.push({ x: rx, z: rz, incoming: true });
+
+    for (let s = 0; s < maxSteps; s++) {
+      path.push({ x: rx, z: rz, incoming: false });
+
+      if (rx > L || rx < -0.5 || rz < -1 || rz > L + 1) break;
+
+      // Compute local IOR gradient for GRIN ray bending
+      const eps = L / GRID * 0.5;
+      const nHere = localIOR(rx, yMid, rz, avgDensity);
+      const nPx = localIOR(rx + eps, yMid, rz, avgDensity);
+      const nMx = localIOR(rx - eps > 0 ? rx - eps : 0, yMid, rz, avgDensity);
+      const nPz = localIOR(rx, yMid, ((rz + eps) % L + L) % L, avgDensity);
+      const nMz = localIOR(rx, yMid, ((rz - eps) % L + L) % L, avgDensity);
+
+      const dndx = (nPx - nMx) / (2 * eps);
+      const dndz = (nPz - nMz) / (2 * eps);
+
+      // Eikonal equation: d/ds(n * dr/ds) = grad(n)
+      // Approximate: curvature = (1/n) * grad(n) perpendicular to ray
+      const bend = stepSize / nHere;
+      rdx += bend * dndx;
+      rdz += bend * dndz;
+
+      // Renormalize direction
+      const mag = Math.sqrt(rdx * rdx + rdz * rdz);
+      rdx /= mag;
+      rdz /= mag;
+
+      rx += stepSize * rdx;
+      rz += stepSize * rdz;
+    }
+
+    rays.push(path);
+  }
+
+  return rays;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+
+function drawSim() {
+  const ctx = sCtx;
+  const L = params.boxL;
+  const scale = W / L;
+
+  ctx.fillStyle = '#05050a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw grid for reference
+  ctx.strokeStyle = '#111825';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= L; i += 2) {
+    ctx.beginPath();
+    ctx.moveTo(i * scale, 0);
+    ctx.lineTo(i * scale, H);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i * scale);
+    ctx.lineTo(W, i * scale);
+    ctx.stroke();
+  }
+
+  // Draw particles (top-down XY view, color by z-depth and speed)
+  const N = params.N;
+  for (let i = 0; i < N; i++) {
+    const speed = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i]);
+    const depth = pz[i] / L; // 0 to 1
+    const radius = 2 + depth * 3;
+
+    // Color: blue (cold/slow) -> white (medium) -> orange/red (hot/fast)
+    const t = Math.min(speed / (3 * Math.sqrt(params.T)), 1);
+    const r = Math.floor(80 + 175 * t);
+    const g = Math.floor(120 + 100 * (1 - Math.abs(t - 0.5) * 2));
+    const b = Math.floor(255 * (1 - t));
+    const alpha = 0.4 + 0.6 * depth;
+
+    ctx.beginPath();
+    ctx.arc(px[i] * scale, py[i] * scale, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+    ctx.fill();
+  }
+
+  // Draw interface plane indicator (x=0 line)
+  ctx.strokeStyle = '#4af8';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, H);
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#668';
+  ctx.font = '11px Courier New';
+  ctx.fillText('XY top-down | color = speed | size = depth', 8, H - 8);
+
+  // Temperature / KE readout
+  let ke = 0;
+  for (let i = 0; i < N; i++) {
+    ke += vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i];
+  }
+  const measuredT = ke / (3 * N);
+  ctx.fillStyle = '#8af';
+  ctx.fillText(`T_measured: ${measuredT.toFixed(3)}  T_target: ${params.T.toFixed(1)}`, 8, 16);
+  ctx.fillText(`N: ${N}  box: ${L.toFixed(1)}`, 8, 30);
+}
+
+function drawRayTrace(rays) {
+  const ctx = rCtx;
+  const L = params.boxL;
+  const margin = 3; // extra space outside box for incoming rays
+  const totalW = L + margin;
+  const scaleX = W / totalW;
+  const scaleZ = H / L;
+  const offsetX = margin * scaleX;
+
+  ctx.fillStyle = '#05050a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw medium background (right of interface)
+  const gradient = ctx.createLinearGradient(offsetX, 0, W, 0);
+  gradient.addColorStop(0, '#0a1020');
+  gradient.addColorStop(1, '#060810');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(offsetX, 0, W - offsetX, H);
+
+  // Draw density field as a heatmap in XZ plane
+  const G = GRID;
+  const ym = Math.floor(G / 2);
+  const cellW = (W - offsetX) / G;
+  const cellH = H / G;
+  for (let ix = 0; ix < G; ix++) {
+    for (let iz = 0; iz < G; iz++) {
+      const d = densityGrid[ix * G * G + ym * G + iz];
+      const avgD = params.N / (L * L * L);
+      const intensity = Math.min(d / (avgD * 3), 1);
+      if (intensity > 0.05) {
+        const r = Math.floor(20 + 40 * intensity);
+        const g = Math.floor(30 + 60 * intensity);
+        const b = Math.floor(50 + 80 * intensity);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(
+          offsetX + ix * cellW,
+          iz * cellH,
+          cellW + 1, cellH + 1
+        );
+      }
+    }
+  }
+
+  // Draw interface plane
+  ctx.strokeStyle = '#4af';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(offsetX, 0);
+  ctx.lineTo(offsetX, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw interface normal
+  ctx.strokeStyle = '#4af4';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  const midY = H / 2;
+  ctx.beginPath();
+  ctx.moveTo(offsetX, midY);
+  ctx.lineTo(offsetX + 60, midY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#4af6';
+  ctx.font = '10px Courier New';
+  ctx.fillText('normal', offsetX + 4, midY - 4);
+
+  // Draw rays
+  for (const path of rays) {
+    if (path.length < 2) continue;
+
+    // Incoming segment
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,220,100,0.6)';
+    ctx.lineWidth = 1;
+    let started = false;
+    for (const pt of path) {
+      if (!pt.incoming) break;
+      const sx = offsetX + pt.x * ((W - offsetX) / L);
+      const sy = pt.z * scaleZ;
+      if (!started) { ctx.moveTo(sx, sy); started = true; }
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    // Refracted segment
+    ctx.beginPath();
+    ctx.lineWidth = 1.2;
+    started = false;
+    let prevX, prevZ;
+    for (const pt of path) {
+      if (pt.incoming) continue;
+      const sx = offsetX + pt.x * ((W - offsetX) / L);
+      const sy = pt.z * scaleZ;
+
+      if (!started) {
+        ctx.moveTo(sx, sy);
+        started = true;
+      } else {
+        ctx.lineTo(sx, sy);
+      }
+      prevX = sx;
+      prevZ = sy;
+    }
+
+    // Color the refracted ray based on bending
+    const firstInner = path.find(p => !p.incoming);
+    const lastPt = path[path.length - 1];
+    if (firstInner && lastPt && !lastPt.incoming) {
+      const deflection = Math.abs(lastPt.z - firstInner.z) / L;
+      const r = Math.floor(255 * Math.min(1, 0.3 + deflection * 3));
+      const g = Math.floor(200 * Math.max(0, 1 - deflection * 2));
+      const b = Math.floor(100 + 155 * (1 - deflection));
+      ctx.strokeStyle = `rgba(${r},${g},${b},0.7)`;
+    } else {
+      ctx.strokeStyle = 'rgba(255,200,80,0.5)';
+    }
+    ctx.stroke();
+  }
+
+  // Labels
+  ctx.fillStyle = '#446';
+  ctx.font = '11px Courier New';
+  ctx.fillText('AIR', 4, 16);
+  ctx.fillStyle = '#448';
+  ctx.fillText(`MEDIUM (n=${params.ior.toFixed(2)})`, offsetX + 8, 16);
+  ctx.fillStyle = '#668';
+  ctx.fillText('XZ cross-section | rays refract at planar interface', 8, H - 8);
+
+  // Angle readout
+  ctx.fillStyle = '#8af';
+  ctx.fillText(`incident angle: ${params.lightAngle}\u00B0`, 8, H - 24);
+  const sinT2 = Math.sin(Math.abs(params.lightAngle) * Math.PI / 180) / params.ior;
+  if (sinT2 < 1) {
+    const refAngle = Math.asin(sinT2) * 180 / Math.PI;
+    ctx.fillText(`refracted angle: ${refAngle.toFixed(1)}\u00B0`, 8, H - 38);
+  } else {
+    ctx.fillText('total internal reflection!', 8, H - 38);
+  }
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+
+let frameCount = 0;
+const PHYSICS_SUBSTEPS = 5;
+let rays = [];
+
+function mainLoop() {
+  if (!params.paused) {
+    for (let s = 0; s < PHYSICS_SUBSTEPS; s++) {
+      step();
+    }
+    frameCount++;
+
+    // Recompute density grid and rays periodically
+    if (frameCount % 3 === 0) {
+      computeDensityGrid();
+      rays = traceRays();
+    }
+  }
+
+  drawSim();
+  drawRayTrace(rays);
+  requestAnimationFrame(mainLoop);
+}
+
+// ============================================================
+// UI WIRING
+// ============================================================
+
+function wireControl(sliderId, displayId, paramKey, parser) {
+  const slider = document.getElementById(sliderId);
+  const display = document.getElementById(displayId);
+  slider.addEventListener('input', () => {
+    const val = parser(slider.value);
+    params[paramKey] = val;
+    display.textContent = slider.value;
+  });
+}
+
+wireControl('sTemp', 'vTemp', 'T', parseFloat);
+wireControl('sIOR', 'vIOR', 'ior', parseFloat);
+wireControl('sAngle', 'vAngle', 'lightAngle', parseInt);
+wireControl('sRays', 'vRays', 'rayCount', parseInt);
+
+document.getElementById('sCount').addEventListener('input', function() {
+  document.getElementById('vCount').textContent = this.value;
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  params.N = parseInt(document.getElementById('sCount').value);
+  initParticles();
+  computeDensityGrid();
+  rays = traceRays();
+});
+
+document.getElementById('btnPause').addEventListener('click', function() {
+  params.paused = !params.paused;
+  this.textContent = params.paused ? 'Resume' : 'Pause';
+});
+
+// --- Initialize and start ---
+initParticles();
+computeDensityGrid();
+rays = traceRays();
+mainLoop();
+</script>
+</body>
+</html>
